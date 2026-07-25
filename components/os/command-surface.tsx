@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowUpRight, CircleDot, Command, Sparkles, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SystemStatus } from '@/components/os/system-status';
 import { useCommandPalette } from '@/store/command-palette';
 
 const panels = [
@@ -50,10 +51,7 @@ export function CommandSurface() {
           </span>
           <span className="text-sm font-semibold tracking-tight">CommandOS</span>
         </div>
-        <span className="border-border/60 bg-card/40 text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1 text-xs backdrop-blur">
-          <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-          systems nominal
-        </span>
+        <SystemStatus className="border-border/60 bg-card/40 rounded-full border px-3 py-1 backdrop-blur" />
       </header>
 
       <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-16">

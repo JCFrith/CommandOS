@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { commandGroups } from '@/lib/commands/registry';
 import { useCommandPalette } from '@/store/command-palette';
+import { SystemStatus } from '@/components/os/system-status';
 
 const navCommands = commandGroups().find((s) => s.group === 'navigate')?.commands ?? [];
 
@@ -78,10 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ⌘K
             </kbd>
           </button>
-          <span className="text-muted-foreground hidden items-center gap-2 text-xs sm:flex">
-            <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-            systems nominal
-          </span>
+          <SystemStatus className="hidden sm:flex" />
         </header>
 
         <main className="min-w-0 flex-1 px-5 py-8 lg:px-8">{children}</main>

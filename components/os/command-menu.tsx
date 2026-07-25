@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
 
@@ -14,6 +13,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command';
 import { commandGroups, type ActionCommandId } from '@/lib/commands/registry';
+import { useCommandShortcut } from '@/hooks/use-command-shortcut';
 import { useCommandPalette } from '@/store/command-palette';
 import type { Command } from '@/types';
 
@@ -36,16 +36,7 @@ export function CommandMenu() {
   const router = useRouter();
   const { open, setOpen, toggle, query, setQuery, reset } = useCommandPalette();
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        toggle();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [toggle]);
+  useCommandShortcut(toggle);
 
   const runCommand = (command: Command) => {
     reset();
