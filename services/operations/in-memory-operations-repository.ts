@@ -65,9 +65,20 @@ export class InMemoryOperationsRepository implements OperationsRepository {
  * The active operations repository. Development uses the in-memory store above;
  * swap this single binding for the Supabase adapter when it lands.
  *
- * Pinned to `globalThis` outside production so the store survives module
- * re-evaluation from HMR during `next dev` (the standard Next dev-singleton
- * pattern) — a create then made visible to a subsequent read on the same worker.
+ * Pinned to `globalThis` so that, WITHIN a single JS realm, one store is shared
+ * across every copy of this module's graph. This matters because Next bundles
+ * Server Actions, Route Handlers and page RSCs as separate graphs — without the
+ * pin each gets its own `Map`, and a create via an action wouldn't be visible to
+ * a read in a page render even in the same realm. It also survives HMR
+ * re-evaluation under `next dev`. The pin is unconditional because this is the
+ * development store; the production Supabase adapter (shared by construction — a
+ * database) replaces this binding, so the pin never affects the production path.
+ *
+ * It does NOT bridge separate realms: `next start` (and serverless) fan requests
+ * across multiple worker processes/threads, each with its own `globalThis`, so a
+ * write handled by one worker isn't visible to a read on another. That is the
+ * fundamental in-memory limitation (TECH_DEBT TD-09) the Supabase adapter closes.
+ * The workflows are exercised in a single realm by the unit/integration tests.
  */
 const globalForOperations = globalThis as typeof globalThis & {
   __operationsRepository?: OperationsRepository;
@@ -76,6 +87,4 @@ const globalForOperations = globalThis as typeof globalThis & {
 export const operationsRepository: OperationsRepository =
   globalForOperations.__operationsRepository ?? new InMemoryOperationsRepository();
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForOperations.__operationsRepository = operationsRepository;
-}
+globalForOperations.__operationsRepository = operationsRepository;

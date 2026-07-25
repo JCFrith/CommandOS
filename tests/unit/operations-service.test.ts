@@ -88,6 +88,25 @@ describe('OperationsService.list / get', () => {
   it('throws not_found for a missing operation', async () => {
     await expect(service.get(ctxFor(user), 'nope')).rejects.toBeInstanceOf(OperationError);
   });
+
+  it('blocks cross-workspace writes (update / transition) as not_found', async () => {
+    const op = await service.create(ctxFor(user, 'owner', 'ws-1'), { title: 'A-only' });
+    // Even an owner of a *different* workspace cannot reach it.
+    const foreign = ctxFor(user, 'owner', 'ws-2');
+
+    await expect(
+      service.update(foreign, op.id, { title: 'Hijack', priority: 'low' }),
+    ).rejects.toMatchObject({ code: 'not_found' });
+    await expect(service.transition(foreign, op.id, { to: 'planned' })).rejects.toMatchObject({
+      code: 'not_found',
+    });
+    await expect(service.activity(foreign, op.id)).rejects.toMatchObject({ code: 'not_found' });
+
+    // The record is untouched in its own workspace.
+    const still = await service.get(ctxFor(user, 'owner', 'ws-1'), op.id);
+    expect(still.title).toBe('A-only');
+    expect(still.status).toBe('draft');
+  });
 });
 
 describe('OperationsService.update', () => {
@@ -162,5 +181,28 @@ describe('OperationsService.transition', () => {
     const same = await service.transition(ctx, op.id, { to: 'draft' });
     expect(same.status).toBe('draft');
     expect(await service.activity(ctx, op.id)).toHaveLength(1);
+  });
+});
+
+describe('OperationsService.activity ordering', () => {
+  it('is newest-first even when entries share a timestamp', async () => {
+    // Fixed clock → every activity gets the identical createdAt, so a naive
+    // timestamp sort would tie. Ordering must fall back to append order.
+    const fixed: ServiceDeps = {
+      id: (() => {
+        let n = 0;
+        return () => `id-${++n}`;
+      })(),
+      now: () => '2026-01-01T00:00:00.000Z',
+    };
+    const svc = new OperationsService(new InMemoryOperationsRepository(), fixed);
+    const ctx = ctxFor(user);
+
+    const op = await svc.create(ctx, { title: 'Rapid' });
+    await svc.update(ctx, op.id, { title: 'Rapid v2', priority: 'high' });
+    await svc.transition(ctx, op.id, { to: 'planned' });
+
+    const activity = await svc.activity(ctx, op.id);
+    expect(activity.map((a) => a.type)).toEqual(['status_changed', 'updated', 'created']);
   });
 });

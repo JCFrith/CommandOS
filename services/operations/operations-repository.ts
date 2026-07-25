@@ -23,8 +23,14 @@ export interface OperationsRepository {
   create(operation: Operation): Promise<Operation>;
   /** Replace an existing operation record. */
   update(operation: Operation): Promise<Operation>;
-  /** Timeline entries for an operation (unordered; callers sort for display). */
+  /**
+   * Timeline entries for an operation in **chronological (append) order** —
+   * oldest first. The activity log is append-only, so this ordering is a stable,
+   * backend-agnostic contract (a Supabase adapter returns `ORDER BY created_at,
+   * id`). The service reverses for newest-first display; relying on `createdAt`
+   * alone would tie for entries written in the same millisecond.
+   */
   listActivity(workspaceId: string, operationId: string): Promise<OperationActivity[]>;
-  /** Append an immutable activity entry. */
+  /** Append an immutable activity entry (preserving chronological order). */
   appendActivity(activity: OperationActivity): Promise<OperationActivity>;
 }

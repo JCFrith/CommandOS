@@ -180,11 +180,16 @@ export class OperationsService {
     return saved;
   }
 
-  /** The activity timeline for an operation, newest first. */
+  /**
+   * The activity timeline for an operation, newest first. The repository returns
+   * entries in chronological (append) order, so a reverse yields newest-first
+   * deterministically — including entries written in the same millisecond, which
+   * a `createdAt` sort would tie on.
+   */
   async activity(ctx: OperationsContext, id: string): Promise<OperationActivity[]> {
     await this.get(ctx, id); // authorize + existence
     const entries = await this.repo.listActivity(ctx.workspace.id, id);
-    return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return entries.reverse();
   }
 
   // --- internals -----------------------------------------------------------
