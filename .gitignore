@@ -50,3 +50,21 @@ yarn-error.log*
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# file-sync (iCloud Drive) conflict copies
+# When the repo lives under ~/Documents, iCloud Drive resolves duplicate
+# versions by appending " 2", " 3", … before the extension (e.g.
+# "auth-form 2.tsx", "CHANGELOG 3.md"). Match that exact signature — a space +
+# digit immediately before a known source extension — so real filenames that
+# merely contain a digit (e.g. "chapter2.md", "Q1 2024.md") are never ignored.
+* [2-9].ts
+* [2-9].tsx
+* [2-9].js
+* [2-9].jsx
+* [2-9].mjs
+* [2-9].cjs
+* [2-9].md
+* [2-9].mdx
+* [2-9].json
+* [2-9].css
+* [2-9].scss
