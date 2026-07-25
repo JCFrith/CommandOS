@@ -76,7 +76,12 @@ transitions the spec lists are legal; there is deliberately no cancel path.
 Archived is terminal and read-only. Rationale: CLAUDE.md forbids inventing
 architecture — follow the spec.
 
-### D-302 · In-memory dev repository now; Supabase adapter deferred
+### D-302 · In-memory dev repository now; Supabase adapter deferred (APPROVED)
+
+**Status: approved by the product owner at the Sprint 3 pre-merge review
+(2026-07-25).** Operations persistence remains the in-memory development
+implementation until the planned Supabase persistence sprint defined in the
+implementation roadmap.
 
 `docs/roadmap.md` scheduled the Supabase operations migration in Sprint 3, but
 the sprint directive is an in-memory/local implementation "suitable for
@@ -85,6 +90,13 @@ the interface and defer the Supabase adapter. Trade-off: the in-memory store is
 per-worker, so it does not share state across a multi-worker `next start` /
 serverless deployment — acceptable for local dev; the Supabase adapter is the
 production path. Consistent with ADR 0002 (swap implementations, not call sites).
+
+The `OperationsRepository` and `OperationsService` interfaces are the **stable
+contract**: the Supabase adapter must implement the existing interface without
+changing UI components or domain logic. Verified at review — no UI or service
+code imports the in-memory implementation; only `operations-service.ts` (default
+binding) and the tests reference it, and the interface is domain-types-in/out so
+the adapter is pure row mapping.
 
 ### D-303 · Workspace scoping maps `organization_id` → `workspaceId`
 

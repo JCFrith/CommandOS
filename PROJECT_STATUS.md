@@ -1,11 +1,11 @@
 # PROJECT_STATUS
 
-_Last updated during Sprint 3 — Operations (branch `sprint-3-operations`, not merged)._
+_Last updated at the Sprint 3 — Operations merge (`v0.3.0`)._
 
 ## Current Sprint
 
-**Sprint 3 — Operations** 🚧 implemented on branch `sprint-3-operations` (not
-merged, not tagged — awaiting review).
+**Sprint 3 — Operations** ✅ complete — reviewed, merged to `main`, tagged
+`v0.3.0`.
 Sprint 2 — Auth & Workspaces ✅ (`v0.2.0`, `cef73ef`) · Sprint 1 — Command
 Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation ✅ (`f4809c0`).
 
@@ -86,7 +86,7 @@ cycle is covered in-process by the service tests.
 
 | Suite            | Result                                                     |
 | ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 59 passing across 12 files (43 new for Operations)      |
+| Unit (Vitest)    | ✅ 60 passing across 12 files (44 new for Operations)      |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 ## Technical Debt Audit (post-Sprint 1)
@@ -142,23 +142,47 @@ reviewed as correct.
 
 ## Sprint 3 Review & Known Limitations
 
-Self-reviewed every Sprint 3 file across the requested dimensions (security, a11y,
-unnecessary client components, duplicated logic, hydration risks, dead code,
-premature abstraction). Cleanups applied: removed unused permission aliases and
-`OperationsService.nextStatuses`; dropped a redundant console log in the error
-boundary. Notable decisions and gaps (see `DECISIONS.md` / `TECH_DEBT.md`):
+Reviewed at the initial Sprint 3 commit and again at the **pre-merge review**
+(2026-07-25) across every requested dimension (lifecycle correctness, workspace
+isolation, permission enforcement, boundary integrity, coupling to the in-memory
+impl, security, validation/error handling, a11y + keyboard nav, RSC boundaries,
+unnecessary client components, hydration, duplication, dead code, premature
+abstraction, test quality, convention consistency).
 
-- **Roadmap deviation (approved directive).** `docs/roadmap.md` scheduled the
-  Supabase operations migration in Sprint 3; this sprint ships the in-memory dev
-  repository per the sprint directive and defers the Supabase adapter. The
-  `OperationsRepository` seam makes it a drop-in later.
+**Pre-merge verification (all pass):**
+
+1. No UI component imports/instantiates the in-memory repository — it is
+   referenced only by `operations-service.ts` (default binding) and the tests.
+2. Domain/service tests are UI-free (only `operation-form.test.tsx` uses RTL).
+3. Workspace-scoped reads **and writes** cannot cross boundaries — every repo
+   call is scoped by `ctx.workspace.id`; writes derive from a workspace-scoped
+   `get` (cross-workspace update/transition/activity → `not_found`, now tested).
+4. Invalid transitions are rejected in the service (`canTransition` guard) and
+   the UI only offers server-computed legal moves.
+5. Dev-only persistence is labelled in code (`DEVELOPMENT-ONLY`) and docs.
+6. The Supabase adapter can implement the existing interface unchanged
+   (domain-types-in/out; identity/timestamps/authz live in the service).
+7. Palette actions are workspace + permission scoped via `/api/operations`
+   (`service.list` → `canViewOperations`); open/create re-authorize server-side.
+8. Loading / empty / error / success / permission-denied / not-signed-in states
+   are represented honestly.
+
+**Cleanups applied:** (initial commit) removed unused permission aliases and
+`OperationsService.nextStatuses`, dropped a redundant console log in the error
+boundary. (pre-merge) added cross-workspace write-isolation tests (60 tests total).
+
+**Known limitations (see `DECISIONS.md` / `TECH_DEBT.md`):**
+
+- **Persistence deferral — APPROVED.** Operations run on the in-memory dev
+  repository until the planned Supabase persistence sprint (D-302, TD-05). The
+  repository/service interfaces are the stable contract for that adapter.
 - **In-memory store is single-worker.** A write on one worker isn't visible to a
   read on another (`next start` / serverless run multiple workers). Fine for
   single-process `next dev`; the Supabase adapter is the multi-worker/production path.
 - **Lifecycle from spec, verbatim.** Six states, six transitions — no cancel path,
   because the state-machine spec lists none. Archived operations are read-only.
 - Unknown operation ids render the not-found UI but return HTTP 200 (nested
-  `notFound()` under the streaming `force-dynamic` console layout).
+  `notFound()` under the streaming `force-dynamic` console layout) — TD-10.
 
 ## Next Sprint
 
@@ -167,5 +191,4 @@ boundary. Notable decisions and gaps (see `DECISIONS.md` / `TECH_DEBT.md`):
 - Agent runtime abstraction; OpenAI-backed NL → command parsing
 - Streaming agent responses; tool-call scaffolding
 
-> Sprint 3 is complete on its branch but **not merged, not tagged**. Sprint 4 has
-> **not** been started. Awaiting approval.
+> Sprint 4 has **not** been started.

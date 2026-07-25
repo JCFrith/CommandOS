@@ -9,9 +9,14 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 3 — **Operations**. Implemented on branch `sprint-3-operations` (not yet
-merged or tagged). The complete Operations vertical slice on a development
-in-memory store, behind the repository/service boundaries.
+_Nothing yet — Sprint 4 (Agents & AI) has not started._
+
+## [0.3.0] — 2026-07-25
+
+Sprint 3 — **Operations**. The complete Operations vertical slice on a
+development in-memory store, behind the repository/service boundaries. Persistence
+remains in-memory until the planned Supabase persistence sprint (deferral approved
+at the pre-merge review).
 
 ### Added
 
@@ -31,8 +36,9 @@ in-memory store, behind the repository/service boundaries.
 - ⌘K command-palette actions to create, find, and open operations (live feed via
   TanStack Query against a new workspace-scoped `/api/operations` route).
 - shadcn `textarea` primitive.
-- 43 unit/component tests (state machine, permissions, schema, repository,
-  service workflows, command registration, and the operation form).
+- 44 unit/component tests (state machine, permissions, schema, repository,
+  service workflows incl. cross-workspace isolation, command registration, and
+  the operation form).
 
 ### Changed
 
@@ -114,5 +120,6 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/jcfrith/CommandOS/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/jcfrith/CommandOS/releases/tag/v0.2.0
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0
+[0.2.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.2.0
