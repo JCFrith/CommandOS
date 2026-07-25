@@ -15,15 +15,16 @@ Living sprint plan. Each sprint ends green on typecheck + lint + build + test.
 
 **Acceptance:** `npm run typecheck && npm run lint && npm run build && npm run test` all pass.
 
-## Sprint 1 — Command Surface & Shell
+## Sprint 1 — Command Surface & Shell ✅
 
-- [ ] App shell layout: sidebar rail + top command bar + content region
-- [ ] ⌘K command palette (open/close, search, keyboard nav) wired to `store/command-palette`
-- [ ] Command registry + typed `Command` model, grouped results
-- [ ] Route scaffolding: `/` (surface), `/console` (shell), placeholder sections as real routes
-- [ ] Reduced-motion-correct transitions between surfaces
+- [x] App shell layout: sidebar rail + top command bar + content region (`components/os/app-shell.tsx`)
+- [x] ⌘K command palette (open/close, search, keyboard nav) wired to `store/command-palette`
+- [x] Command registry + typed `Command` model (route-safe `href`), grouped results
+- [x] Route scaffolding: `/` (surface), `/console` (shell), `agents`/`signals`/`operations`/`settings` as real routes
+- [x] Reduced-motion-correct transitions; animated active-nav indicator (`layoutId`)
+- [x] Landing CTAs wired (Enter → `/console`, ⌘K opens palette)
 
-**Acceptance:** ⌘K opens/closes and filters commands; shell renders; checks green.
+**Acceptance:** ⌘K opens/closes and filters commands from anywhere; shell renders; checks green.
 
 ## Sprint 2 — Auth & Workspaces
 

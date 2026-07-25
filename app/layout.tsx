@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { QueryProvider } from '@/lib/query/provider';
+import { CommandMenu } from '@/components/os/command-menu';
 import { cn } from '@/lib/utils';
 import './globals.css';
 
@@ -42,7 +43,10 @@ export default function RootLayout({
           'bg-background text-foreground min-h-dvh font-sans antialiased',
         )}
       >
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          {children}
+          <CommandMenu />
+        </QueryProvider>
       </body>
     </html>
   );

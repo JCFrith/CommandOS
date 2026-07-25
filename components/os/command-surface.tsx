@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowUpRight, CircleDot, Command, Sparkles, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useCommandPalette } from '@/store/command-palette';
 
 const panels = [
   {
@@ -29,6 +31,7 @@ const panels = [
  */
 export function CommandSurface() {
   const reduce = useReducedMotion();
+  const setOpen = useCommandPalette((s) => s.setOpen);
 
   const fade = (delay: number) => ({
     initial: reduce ? { opacity: 0 } : { opacity: 0, y: 16 },
@@ -79,11 +82,13 @@ export function CommandSurface() {
         </motion.p>
 
         <motion.div {...fade(0.28)} className="mt-9 flex flex-wrap items-center gap-3">
-          <Button size="lg" className="group">
-            Enter CommandOS
-            <ArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          <Button asChild size="lg" className="group">
+            <Link href="/console">
+              Enter CommandOS
+              <ArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </Link>
           </Button>
-          <Button size="lg" variant="outline">
+          <Button size="lg" variant="outline" onClick={() => setOpen(true)}>
             <Command className="size-4" />
             Press ⌘K to command
           </Button>
