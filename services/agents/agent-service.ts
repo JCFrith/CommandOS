@@ -21,8 +21,8 @@ import {
   canManageAgent,
   canViewAgents,
 } from '@/lib/agents/permissions';
-import { buildInvocation } from '@/lib/ai/prompt-builder';
-import { AIProviderError, type AIProvider } from '@/lib/ai/provider';
+import { buildAgentExecutionRequest } from '@/lib/agents/execution-request';
+import type { ExecutionRuntime } from '@/lib/ai/runtime/runtime';
 import type { AgentRepository } from './agent-repository';
 
 /** The resolved caller context (shared with operations). */
@@ -62,16 +62,17 @@ const defaultDeps: ServiceDeps = {
 
 /**
  * Agents use cases. Owns validation (Zod), authorization (RBAC + ownership),
- * lifecycle enforcement (the state machine), workspace scoping, execution
- * orchestration, and activity recording. Depends only on the
- * {@link AgentRepository} and {@link AIProvider} interfaces, so both the store
- * and the model provider swap without touching this logic — the `UI → Service →
- * Adapter → Provider` boundary from `04_API_SPECIFICATION.md`.
+ * lifecycle enforcement (the state machine), workspace scoping, and activity
+ * recording. AI execution mechanics (provider call, retry, timeout, accounting,
+ * structured-output validation, logging) are delegated to the reusable
+ * {@link ExecutionRuntime} — the agent domain only builds a typed request and
+ * maps the result onto its {@link AgentExecution} record. Depends only on the
+ * {@link AgentRepository} and {@link ExecutionRuntime} interfaces.
  */
 export class AgentService {
   constructor(
     private readonly repo: AgentRepository,
-    private readonly ai: AIProvider,
+    private readonly runtime: ExecutionRuntime,
     private readonly deps: ServiceDeps = defaultDeps,
   ) {}
 
@@ -199,8 +200,9 @@ export class AgentService {
   /**
    * Run an eligible agent against operator-provided input. Enforces authz +
    * executable status + AI availability + a duplicate-submission guard, then
-   * invokes the AI provider through the interface, validates the structured
-   * result, persists the execution, and records an `executed` activity.
+   * delegates the model call to the {@link ExecutionRuntime} (which owns retry,
+   * timeout, accounting, structured-output validation, and logging) and maps the
+   * runtime {@link Execution} onto the persisted {@link AgentExecution}.
    */
   async execute(ctx: AgentContext, id: string, input: unknown): Promise<AgentExecution> {
     const agent = await this.get(ctx, id);
@@ -222,7 +224,7 @@ export class AgentService {
       'You do not have permission to run this agent.',
     );
 
-    if (!this.ai.isAvailable()) {
+    if (!this.runtime.isAvailable()) {
       throw new AgentError(
         'unavailable',
         'AI execution is unavailable — no model provider is configured.',
@@ -235,7 +237,6 @@ export class AgentService {
     }
 
     const { input: prompt } = this.parse(executeAgentSchema, input);
-    const startedAt = this.deps.now();
 
     let execution: AgentExecution = {
       id: this.deps.id(),
@@ -249,39 +250,40 @@ export class AgentService {
       model: null,
       promptVersion: null,
       durationMs: null,
-      createdAt: startedAt,
+      createdAt: this.deps.now(),
       completedAt: null,
     };
     execution = await this.repo.createExecution(execution);
 
-    const invocation = buildInvocation(agent, prompt);
-    try {
-      const { output, model, durationMs } = await this.ai.run(invocation);
-      execution = {
-        ...execution,
-        status: 'completed',
-        result: output,
-        model,
-        promptVersion: invocation.promptVersion,
-        durationMs,
-        completedAt: this.deps.now(),
-      };
-    } catch (error) {
-      // Only expected, safe AI errors reach the operator; unknown errors are a
-      // generic failure (never leak internals).
-      const message =
-        error instanceof AIProviderError
-          ? error.message
-          : 'The AI assistant could not complete this request. Please try again.';
-      execution = {
-        ...execution,
-        status: 'failed',
-        error: message,
-        promptVersion: invocation.promptVersion,
-        completedAt: this.deps.now(),
-      };
-    }
+    const request = buildAgentExecutionRequest(
+      agent,
+      prompt,
+      {
+        workspaceId: ctx.workspace.id,
+        operatorId: ctx.user.id,
+        operatorName: ctx.user.displayName,
+        subjectId: agent.id,
+        subjectType: 'agent',
+      },
+      this.deps.id(),
+    );
+    const run = await this.runtime.run(request);
 
+    execution = {
+      ...execution,
+      status:
+        run.status === 'completed'
+          ? 'completed'
+          : run.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed',
+      result: run.result?.output ?? null,
+      error: run.error?.message ?? null,
+      model: run.metadata.model,
+      promptVersion: run.metadata.promptVersion,
+      durationMs: run.metadata.latencyMs,
+      completedAt: this.deps.now(),
+    };
     execution = await this.repo.updateExecution(execution);
     await this.record(
       ctx,

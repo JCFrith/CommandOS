@@ -11,10 +11,58 @@ this file is the terse, versioned log.
 
 _Nothing yet._
 
+## [0.4.5] — 2026-07-25
+
+Sprint 4.5 — **AI Runtime & Platform Foundation**. No new end-user features — a
+reusable AI execution platform, with agents refactored onto it and behavior
+unchanged. `ModelProvider` and `ExecutionRuntime` are the canonical AI platform
+contracts. Streaming, MCP, queues, background workers, schedulers, and job stores
+remain **contracts only**; in-memory execution logging and feature persistence
+remain **development-only** (TD-18, TD-19, TD-20 open).
+
+### Added
+
+- **Execution runtime** (`lib/ai/runtime`): a generic `ExecutionRuntime` that
+  owns the provider call, retry, timeout, cancellation, token/cost accounting,
+  structured-output validation, lifecycle events, and secret-free logging.
+  Domain model — `Execution`, `ExecutionRequest`, `ExecutionContext`,
+  `ExecutionResult`, `ExecutionMetadata`, `ExecutionError`, `ExecutionEvent` — and
+  a `queued → pending → running → {completed,failed,cancelled,timed_out}` status
+  machine supporting future async/scheduled/autonomous execution.
+- **Provider layer** (`lib/ai/provider`): a generic `ModelProvider` abstraction
+  with separated concerns (provider/model/config/structured-output/streaming),
+  a server-only `OpenAIModelProvider`, and a deterministic `FakeModelProvider`.
+  Model selection stays server-side; streaming is interface-only.
+- **Conversation model** (`lib/ai/conversation`): `SystemPrompt` (trusted) /
+  `UserInput` (untrusted) / `Conversation` / `ContextWindow` — the trust boundary
+  enforced by construction.
+- **Prompt engine** (`lib/ai/prompts`): versioned, strongly-typed, composable
+  templates + `PromptRegistry`; the agent system prompts moved onto it.
+- **Tool framework** (`lib/ai/tools`): `Tool` / `ToolRegistry` / `ToolDefinition`
+  / `ToolInvocation` / `ToolResult` / `ToolError`, three demo tools, and
+  MCP-readiness interfaces.
+- **Retry policies** (`no/fixed/exponential`), **cancellation** (`AbortSignal`),
+  **accounting** (token/cost), **execution logging**, and **background-execution
+  interfaces** (queue/worker/scheduler/job store) — the last defined only.
+- Four new design docs: `docs/ai-runtime.md`, `docs/runtime.md`,
+  `docs/execution-model.md`, `docs/tool-framework.md`.
+- 31 net-new platform tests (runtime, provider, conversation, prompt engine,
+  tools, retry, accounting, execution model).
+
+### Changed
+
+- `AgentService` executes through the `ExecutionRuntime` instead of an inline
+  provider call — the duplicated AI mechanics are gone; behavior is unchanged.
+- Replaced the Sprint-4 agent-specific `AIProvider`/`AIProviderError`/
+  `buildInvocation`/`systemPromptFor` with the generic platform equivalents;
+  moved the agent result schema to `lib/agents/result-schema.ts`.
+
 ## [0.4.0] — 2026-07-25
 
 Sprint 4 — **Agents & AI**. The Agents vertical slice with an AI execution
-workflow behind a provider interface, on the development in-memory store.
+workflow behind a provider interface, on the development in-memory store. _(The
+provider boundary is superseded by the Sprint 4.5 `ModelProvider`/`ExecutionRuntime`
+platform; agent behavior is unchanged.)_
 
 ### Added
 
@@ -161,7 +209,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
 [0.4.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.0
 [0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0
 [0.2.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.2.0
