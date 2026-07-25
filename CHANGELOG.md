@@ -9,9 +9,12 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 4 — **Agents & AI**. Implemented on branch `sprint-4-agents-ai` (not
-merged or tagged). The Agents vertical slice with an AI execution workflow behind
-a provider interface, on the development in-memory store.
+_Nothing yet._
+
+## [0.4.0] — 2026-07-25
+
+Sprint 4 — **Agents & AI**. The Agents vertical slice with an AI execution
+workflow behind a provider interface, on the development in-memory store.
 
 ### Added
 
@@ -158,6 +161,7 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.0
 [0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0
 [0.2.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.2.0

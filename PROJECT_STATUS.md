@@ -1,11 +1,11 @@
 # PROJECT_STATUS
 
-_Last updated during Sprint 4 — Agents & AI (branch `sprint-4-agents-ai`, not merged)._
+_Last updated at the Sprint 4 — Agents & AI release (`v0.4.0`)._
 
 ## Current Sprint
 
-**Sprint 4 — Agents & AI** 🚧 implemented on branch `sprint-4-agents-ai` (not
-merged, not tagged — awaiting review).
+**Sprint 4 — Agents & AI** ✅ complete — reviewed, merged to `main`, tagged
+`v0.4.0`.
 Sprint 3 — Operations ✅ (`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅
 (`v0.2.0`, `cef73ef`) · Sprint 1 — Command Surface & Shell ✅ (`fed69e6`) ·
 Sprint 0 — Foundation ✅ (`f4809c0`).
