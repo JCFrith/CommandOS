@@ -1,14 +1,17 @@
 # PROJECT_STATUS
 
-_Last updated during Sprint 4 — Agents & AI (branch `sprint-4-agents-ai`, not merged)._
+_Last updated during Sprint 4.5 — AI Runtime & Platform (branch `sprint-4.5-ai-runtime`, not merged)._
 
 ## Current Sprint
 
-**Sprint 4 — Agents & AI** 🚧 implemented on branch `sprint-4-agents-ai` (not
-merged, not tagged — awaiting review).
+**Sprint 4.5 — AI Runtime & Platform Foundation** 🚧 implemented on branch
+`sprint-4.5-ai-runtime` (based on Sprint 4; not merged, not tagged).
+Sprint 4 — Agents & AI ✅ (branch `sprint-4-agents-ai`, approved, unmerged) ·
 Sprint 3 — Operations ✅ (`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅
-(`v0.2.0`, `cef73ef`) · Sprint 1 — Command Surface & Shell ✅ (`fed69e6`) ·
-Sprint 0 — Foundation ✅ (`f4809c0`).
+(`v0.2.0`, `cef73ef`) · Sprint 1 ✅ (`fed69e6`) · Sprint 0 ✅ (`f4809c0`).
+
+> **Branch chain:** `sprint-4.5-ai-runtime` builds on `sprint-4-agents-ai`, which
+> is not yet on `main`. Merge Sprint 4 first (or merge the chain in order).
 
 ## Completed Features
 
@@ -95,29 +98,54 @@ Sprint 0 — Foundation ✅ (`f4809c0`).
 - Shared `lib/authz/roles` + `services/workspace/context` (operations refactored
   onto them); **55 new unit/component tests**
 
+### Sprint 4.5 — AI Runtime & Platform Foundation
+
+_Platform sprint — no new end-user features; existing functionality unchanged._
+
+- **Execution runtime** (`lib/ai/runtime`): generic `ExecutionRuntime` owning the
+  provider call, retry, timeout, cancellation, token/cost accounting,
+  structured-output validation, lifecycle events, and secret-free logging;
+  `Execution*` domain model + `queued→pending→running→{completed,failed,cancelled,
+timed_out}` status machine (D-451/452)
+- **Provider layer** (`lib/ai/provider`): generic `ModelProvider` (concerns
+  separated), server-only `OpenAIModelProvider`, deterministic `FakeModelProvider`;
+  model server-side only; streaming interface-only (D-453)
+- **Conversation model** (trusted `SystemPrompt` / untrusted `UserInput`) — the
+  prompt-injection boundary is structural (D-454)
+- **Prompt engine** (versioned, typed, composable templates + registry); agent
+  prompts moved onto it
+- **Tool framework** (`Tool`/`ToolRegistry`/…) + 3 demo tools + **MCP-readiness**
+  interfaces; **background-execution** interfaces (queue/worker/scheduler/job
+  store) — interface-only (D-455)
+- **Retry** (no/fixed/exponential), **cancellation** (`AbortSignal`),
+  **accounting**, **execution logging** — reusable, tested in isolation
+- **Agents refactored** onto the runtime — inline AI mechanics removed; behavior
+  identical (D-456). Docs: `docs/ai-runtime.md`, `runtime.md`,
+  `execution-model.md`, `tool-framework.md`. **31 net-new platform tests**
+
 ## Build Status
 
-| Gate                | Result                                               |
-| ------------------- | ---------------------------------------------------- |
-| `npm run lint`      | ✅ No ESLint warnings or errors                      |
-| `npm run typecheck` | ✅ `tsc --noEmit` clean                              |
-| `npm run build`     | ✅ compiled; 18 app routes (5 new agents routes/api) |
+| Gate                | Result                                             |
+| ------------------- | -------------------------------------------------- |
+| `npm run lint`      | ✅ No ESLint warnings or errors                    |
+| `npm run typecheck` | ✅ `tsc --noEmit` clean                            |
+| `npm run build`     | ✅ compiled; 18 app routes (unchanged — no new UI) |
 
-Runtime smoke (unconfigured, prod server): agents list (empty state), create form
-(Type + Capabilities), `/api/agents` scoped JSON, unknown id → not-found → all 200. **TD-13**: `?workspaceId=<member>` scopes; `?workspaceId=<foreign>` → empty
-(no leak). Create-agent Server Action → 303 → real UUID; empty name → validation
-error. The full run workflow (create → activate → run success/failed → unavailable
-→ history → activity → cross-workspace → permission denial) is verified in a
-single realm via an in-process walkthrough driving the real `AgentService` +
-`FakeAIProvider` — cross-request read-back is not observable under the multi-worker
-server (TD-09).
+Runtime smoke (Sprint 4.5): existing routes render unchanged (`/console/agents`,
+`/console/agents/new`, `/api/agents`, `/console/operations`, `/api/operations`,
+`/console/settings` → 200 — no regression). The platform is exercised in a single
+realm via an in-process walkthrough driving the **real `ExecutionRuntime` +
+`FakeModelProvider`**: structured output + accounting, invalid-output failure,
+retry-to-success (attempts counted), timeout (`timed_out`), cancellation
+(`cancelled`), and the refactored `AgentService` run (completed / honest
+unavailable) — all pass.
 
 ## Test Status
 
-| Suite            | Result                                                     |
-| ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 114 passing across 21 files (55 new for Agents & AI)    |
-| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
+| Suite            | Result                                                      |
+| ---------------- | ----------------------------------------------------------- |
+| Unit (Vitest)    | ✅ 145 passing across 28 files (31 net-new for the runtime) |
+| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)  |
 
 ## Technical Debt Audit (post-Sprint 1)
 
@@ -242,11 +270,38 @@ the retired `agent.dispatch`.
 - Unknown agent id renders the not-found UI but returns HTTP 200 (same nested
   `notFound()` behavior as operations — TD-10).
 
+## Sprint 4.5 Review & Known Limitations
+
+Reviewed every changed file for security, duplication, dead code, and unnecessary
+abstraction. **Verified:** UI never imports a provider/repository; model selection
+is server-side only (no client model/system-prompt injection); operator content
+never enters the system role; structured output is Zod-validated; all failures
+map to safe `ExecutionError`s (no secrets/prompts/stack traces); execution logs
+are secret-free; tool input is validated and tools receive ids only; OpenAI
+adapter is `server-only`. **Cleanups applied:** removed a dead export
+(`neverCancelled`); moved the agent result schema out of `lib/ai` into
+`lib/agents`; replaced an unused eslint-disable. **Behavior preserved:** all
+Sprint-4 agent tests pass unchanged; existing routes render identically.
+
+**Known limitations (see `DECISIONS.md` / `TECH_DEBT.md`):**
+
+- **Interface-only** (by directive, D-455): streaming, background execution
+  (queue/worker/scheduler/job store), and MCP — contracts only, no
+  implementation (TD-19). Tool-calling is not yet wired into the runtime loop
+  (`toolCalls` always 0, TD-20).
+- **Synchronous execution only.** The runtime models `cancelled`/`timed_out` and
+  cancellation interfaces exist, but async/scheduled/background runs and
+  mid-stream cancellation are future work (TD-16).
+- **Dev-only stores.** `InMemoryExecutionLogger` (TD-18) joins the other
+  in-memory stores; single-worker under `next start` (TD-09). Live model calls
+  remain untested here (no key) — the honest unavailable path is covered.
+- Carried: no global AI rate limiting (TD-15); persistence deferral (D-302).
+
 ## Next Sprint
 
 **Sprint 5 — Signals & Observability** (not started)
 
 - Telemetry/signals surface; Supabase realtime subscriptions
 
-> Sprint 4 is complete on its branch but **not merged, not tagged**. Sprint 5 has
-> **not** been started.
+> Sprint 4.5 is complete on its branch but **not merged, not tagged**. Sprint 5
+> has **not** been started.

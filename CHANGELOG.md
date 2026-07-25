@@ -9,6 +9,50 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
+Sprint 4.5 — **AI Runtime & Platform Foundation**. Implemented on branch
+`sprint-4.5-ai-runtime` (based on Sprint 4; not merged or tagged). No new
+end-user features — a reusable AI execution platform, with agents refactored onto
+it and behavior unchanged.
+
+### Added
+
+- **Execution runtime** (`lib/ai/runtime`): a generic `ExecutionRuntime` that
+  owns the provider call, retry, timeout, cancellation, token/cost accounting,
+  structured-output validation, lifecycle events, and secret-free logging.
+  Domain model — `Execution`, `ExecutionRequest`, `ExecutionContext`,
+  `ExecutionResult`, `ExecutionMetadata`, `ExecutionError`, `ExecutionEvent` — and
+  a `queued → pending → running → {completed,failed,cancelled,timed_out}` status
+  machine supporting future async/scheduled/autonomous execution.
+- **Provider layer** (`lib/ai/provider`): a generic `ModelProvider` abstraction
+  with separated concerns (provider/model/config/structured-output/streaming),
+  a server-only `OpenAIModelProvider`, and a deterministic `FakeModelProvider`.
+  Model selection stays server-side; streaming is interface-only.
+- **Conversation model** (`lib/ai/conversation`): `SystemPrompt` (trusted) /
+  `UserInput` (untrusted) / `Conversation` / `ContextWindow` — the trust boundary
+  enforced by construction.
+- **Prompt engine** (`lib/ai/prompts`): versioned, strongly-typed, composable
+  templates + `PromptRegistry`; the agent system prompts moved onto it.
+- **Tool framework** (`lib/ai/tools`): `Tool` / `ToolRegistry` / `ToolDefinition`
+  / `ToolInvocation` / `ToolResult` / `ToolError`, three demo tools, and
+  MCP-readiness interfaces.
+- **Retry policies** (`no/fixed/exponential`), **cancellation** (`AbortSignal`),
+  **accounting** (token/cost), **execution logging**, and **background-execution
+  interfaces** (queue/worker/scheduler/job store) — the last defined only.
+- Four new design docs: `docs/ai-runtime.md`, `docs/runtime.md`,
+  `docs/execution-model.md`, `docs/tool-framework.md`.
+- 31 net-new platform tests (runtime, provider, conversation, prompt engine,
+  tools, retry, accounting, execution model).
+
+### Changed
+
+- `AgentService` executes through the `ExecutionRuntime` instead of an inline
+  provider call — the duplicated AI mechanics are gone; behavior is unchanged.
+- Replaced the Sprint-4 agent-specific `AIProvider`/`AIProviderError`/
+  `buildInvocation`/`systemPromptFor` with the generic platform equivalents;
+  moved the agent result schema to `lib/agents/result-schema.ts`.
+
+---
+
 Sprint 4 — **Agents & AI**. Implemented on branch `sprint-4-agents-ai` (not
 merged or tagged). The Agents vertical slice with an AI execution workflow behind
 a provider interface, on the development in-memory store.
