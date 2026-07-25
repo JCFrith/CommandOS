@@ -59,7 +59,7 @@ Runtime smoke (unconfigured, prod server): `/`, `/login`, `/console`,
 
 | Suite            | Result                                                     |
 | ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 14 passing across 5 files                               |
+| Unit (Vitest)    | ✅ 16 passing across 5 files                               |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 ## Technical Debt Audit (post-Sprint 1)
@@ -89,6 +89,29 @@ low-risk and applied; **retained** items are intentional and documented.
 - `OperationsRepository` interface + `Operation` types are declared with no implementer yet; the Supabase implementation lands in Sprint 3.
 - **Live auth requires Supabase credentials.** Sign-in/up/OAuth were verified by build + unit tests + a render smoke test; end-to-end auth against a real Supabase project is untested here. OAuth providers must be enabled in the Supabase dashboard with `<APP_URL>/auth/callback` allow-listed.
 - Only the personal workspace exists; shared team workspaces (Supabase-backed) are a later sprint. The switcher's "New workspace" is intentionally disabled.
+
+## Pre-merge Architecture Review — `sprint-2-auth-workspaces`
+
+Reviewed all 31 changed files across the requested dimensions. Clean scan: no
+`getSession` misuse (uses `getUser`), no `console.*`/`debugger`, no `any` /
+`ts-ignore`. Six **low-risk fixes applied** (behavior-preserving); the rest
+reviewed as correct.
+
+| Dimension                     | Finding                                                                                                                                           | Action                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Supabase SSR / middleware     | Redirect branches returned a bare `NextResponse.redirect`, dropping auth cookies refreshed by `getUser()` → possible session loss / refresh loop. | **Fixed** — `redirectTo()` copies refreshed cookies onto redirects.                                                      |
+| Accessibility                 | Field errors not linked to inputs; status banner not a live region; OAuth buttons lose label while spinning.                                      | **Fixed** — `aria-describedby` + ids, `role`/`aria-live`, `aria-label`.                                                  |
+| Duplicated logic              | `user → listForUser → workspaces[0]` duplicated in console layout + settings.                                                                     | **Fixed** — extracted `getWorkspaceContext()` (+2 unit tests).                                                           |
+| Security / open redirect      | Callback `next` guard allowed `//host` and `/\host` (protocol-relative) targets, which browsers can resolve cross-origin.                         | **Fixed** — guard now rejects `//` and `/\` prefixes; only same-origin relative paths pass.                              |
+| Conventions (env access)      | `origin()` read `process.env.NEXT_PUBLIC_APP_URL` directly, against the "go through `lib/env`" rule.                                              | **Fixed** — added `configuredAppUrl()` in `lib/env`; Host-header fallback retained (Supabase allow-lists redirect URLs). |
+| RSC violations / client comps | All `'use client'` components justified (forms, Radix primitives, interactivity); `input` stays server-renderable.                                | ✅ No change needed.                                                                                                     |
+| Hydration risks               | `WorkspaceProvider` seeds `useState` from props deterministically; no `Date`/random.                                                              | ✅ No change needed.                                                                                                     |
+| Error handling                | `redirect()` correctly outside try/catch; actions guard unconfigured state and surface errors.                                                    | ✅ No change needed.                                                                                                     |
+| TypeScript / performance      | `getCurrentUser` memoized via React `cache` (layout+page share one round-trip); typed throughout.                                                 | ✅ No change needed.                                                                                                     |
+
+> All four gates (`lint` / `typecheck` / `build` / `test`) pass on the
+> post-review tree. Runtime smoke against a live Supabase project is deferred to
+> a configured environment (unconfigured local dev bypasses auth by design).
 
 ## Next Sprint
 
