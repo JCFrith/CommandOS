@@ -26,11 +26,17 @@ Living sprint plan. Each sprint ends green on typecheck + lint + build + test.
 
 **Acceptance:** ⌘K opens/closes and filters commands from anywhere; shell renders; checks green.
 
-## Sprint 2 — Auth & Workspaces
+## Sprint 2 — Auth & Workspaces ✅
 
-- [ ] Supabase email/OAuth auth, sign-in/out flows
-- [ ] Protected routes via middleware; session in RSC
-- [ ] Workspace context + switcher
+- [x] Supabase email/password + OAuth (Google, GitHub) auth; sign-in/up/out flows
+- [x] PKCE/OAuth callback route (`app/auth/callback`) with open-redirect guard
+- [x] Protected routes via middleware (config-gated) + RSC-level guard; session in RSC
+- [x] Workspace model + repository interface with a real personal-workspace impl
+- [x] Workspace context provider + switcher; operator menu with sign-out
+- [x] Account/workspace settings surface; auth validation via RHF + Zod
+
+**Acceptance:** unauthenticated `/console` redirects to `/login` when configured;
+sign-in/up/out and OAuth wired; workspace resolves per user; checks green.
 
 ## Sprint 3 — Operations
 

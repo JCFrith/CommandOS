@@ -1,11 +1,11 @@
 # PROJECT_STATUS
 
-_Last updated after the post-Sprint-1 technical-debt audit._
+_Last updated after Sprint 2._
 
 ## Current Sprint
 
-**Sprint 1 — Command Surface & Shell** ✅ complete (committed `fed69e6`).
-Sprint 0 — Foundation ✅ complete (committed `f4809c0`).
+**Sprint 2 — Auth & Workspaces** ✅ complete (branch `sprint-2-auth-workspaces`).
+Sprint 1 — Command Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation ✅ (`f4809c0`).
 
 ## Completed Features
 
@@ -31,19 +31,35 @@ Sprint 0 — Foundation ✅ complete (committed `f4809c0`).
 - Reduced-motion-correct transitions throughout
 - Post-sprint tech-debt cleanup: shared `SystemStatus` component, `useCommandShortcut` hook, removed dead `useMounted`
 
+### Sprint 2 — Auth & Workspaces
+
+- **Supabase auth**: email/password + OAuth (Google, GitHub) sign-in / sign-up / sign-out
+- **OAuth callback** (`app/auth/callback/route.ts`) with open-redirect guard
+- **Route protection**: middleware (config-gated) + RSC-level guard in the console layout
+- **Session in RSC**: `getCurrentUser()` request-memoized, projecting a typed `AuthUser`
+- **Workspaces**: `Workspace` model, `WorkspaceRepository` interface + real `PersonalWorkspaceRepository`
+- **Workspace context** provider + switcher; operator **UserMenu** with sign-out
+- **Settings** surface showing real account + workspace; RHF + Zod auth form
+- shadcn primitives added: `input`, `label`, `avatar`, `dropdown-menu`
+- Decoupled the Supabase server client from unrelated secrets (`supabasePublicConfig`)
+- Console routes `force-dynamic`; unit tests for auth schema + workspace repo
+
 ## Build Status
 
-| Gate                | Result                             |
-| ------------------- | ---------------------------------- |
-| `npm run lint`      | ✅ No ESLint warnings or errors    |
-| `npm run typecheck` | ✅ `tsc --noEmit` clean            |
-| `npm run build`     | ✅ 9 pages generated, 6 app routes |
+| Gate                | Result                              |
+| ------------------- | ----------------------------------- |
+| `npm run lint`      | ✅ No ESLint warnings or errors     |
+| `npm run typecheck` | ✅ `tsc --noEmit` clean             |
+| `npm run build`     | ✅ 11 pages generated, 8 app routes |
+
+Runtime smoke (unconfigured, prod server): `/`, `/login`, `/console`,
+`/console/settings` → 200; `/auth/callback` → 307 → `/login?error=auth`.
 
 ## Test Status
 
 | Suite            | Result                                                     |
 | ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 8 passing across 3 files                                |
+| Unit (Vitest)    | ✅ 14 passing across 5 files                               |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 ## Technical Debt Audit (post-Sprint 1)
@@ -59,7 +75,7 @@ low-risk and applied; **retained** items are intentional and documented.
 | Duplicated code        | "systems nominal" indicator duplicated in landing + console bar.     | **Fixed** — extracted `components/os/system-status.tsx`.          |
 | Duplicated code        | ⌘K keydown effect inline in `command-menu`.                          | **Fixed** — moved to `hooks/use-command-shortcut.ts`.             |
 | Unused code            | `hooks/use-mounted.ts` had zero importers (dead).                    | **Fixed** — removed; `hooks/` now holds the used shortcut hook.   |
-| Unused dependencies    | `react-hook-form` + `@hookform/resolvers` not yet imported.          | Retained — mandated stack; first used in Sprint 2/3 forms.        |
+| Unused dependencies    | `react-hook-form` + `@hookform/resolvers` not yet imported.          | ✅ Resolved in Sprint 2 — now power the auth form.                |
 | Premature abstractions | `OperationsRepository` + `Operation` types have no implementer yet.  | Retained — documented persistence boundary; implemented Sprint 3. |
 | Simplification         | No further safe simplifications without changing behavior.           | ✅ Deferred to feature sprints.                                   |
 
@@ -70,15 +86,16 @@ low-risk and applied; **retained** items are intentional and documented.
 - Native install scripts (esbuild, sharp) run under npm allow-scripts warnings in this environment; builds/tests succeed regardless.
 - Action commands (`New Operation`, `Dispatch an Agent`) currently navigate to their section carrying an `intent` query param; the actual create/dispatch flows land in Sprints 3 and 4.
 - Playwright e2e not executed this cycle (requires a build+serve run).
-- `react-hook-form` + `@hookform/resolvers` are installed but unused until form work (Sprint 2/3); retained per the mandated stack.
 - `OperationsRepository` interface + `Operation` types are declared with no implementer yet; the Supabase implementation lands in Sprint 3.
+- **Live auth requires Supabase credentials.** Sign-in/up/OAuth were verified by build + unit tests + a render smoke test; end-to-end auth against a real Supabase project is untested here. OAuth providers must be enabled in the Supabase dashboard with `<APP_URL>/auth/callback` allow-listed.
+- Only the personal workspace exists; shared team workspaces (Supabase-backed) are a later sprint. The switcher's "New workspace" is intentionally disabled.
 
 ## Next Sprint
 
-**Sprint 2 — Auth & Workspaces** (not started; awaiting approval)
+**Sprint 3 — Operations** (not started; awaiting approval)
 
-- Supabase email/OAuth authentication, sign-in/out flows
-- Protected routes via middleware; session available in RSC
-- Workspace context + switcher
+- `Operation` schema (Supabase migration) + `OperationsRepository` implementation
+- Server Actions (create/list) with Zod validation
+- Live operations feed with optimistic updates
 
-> Per directive: Sprint 2 has **not** been started. Awaiting approval.
+> Sprint 3 has **not** been started. Awaiting approval.
