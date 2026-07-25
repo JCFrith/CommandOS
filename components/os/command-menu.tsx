@@ -15,12 +15,17 @@ import {
   CommandShortcut,
 } from '@/components/ui/command';
 import { commandGroups, type ActionCommandId } from '@/lib/commands/registry';
+import { recordCommandAction } from '@/app/console/signals/actions';
 import {
   paletteAgentsKey,
   paletteAgentsUrl,
   paletteOperationsKey,
   paletteOperationsUrl,
+  paletteSignalsKey,
+  paletteSignalsUrl,
 } from '@/lib/commands/palette';
+import { SEVERITY_META } from '@/lib/signals/display';
+import type { SignalSeverity } from '@/lib/signals/types';
 import { useCommandShortcut } from '@/hooks/use-command-shortcut';
 import { useCommandPalette } from '@/store/command-palette';
 import { useWorkspaceStore } from '@/store/workspace';
@@ -33,6 +38,9 @@ import type { Command, OperationStatus, AgentStatus, AgentType } from '@/types';
 const ACTION_ROUTES: Record<ActionCommandId, Route> = {
   'create.operation': '/console/operations/new' as Route,
   'create.agent': '/console/agents/new' as Route,
+  'signals.health': '/console/signals?view=health' as Route,
+  'signals.correlations': '/console/signals?view=correlations' as Route,
+  'signals.errors': '/console/signals?severity=error' as Route,
 };
 
 interface OperationSummary {
@@ -62,6 +70,19 @@ async function fetchAgents(workspaceId: string): Promise<AgentSummary[]> {
   return data.agents ?? [];
 }
 
+interface SignalSummary {
+  id: string;
+  title: string;
+  severity: SignalSeverity;
+}
+
+async function fetchSignals(workspaceId: string): Promise<SignalSummary[]> {
+  const res = await fetch(paletteSignalsUrl(workspaceId));
+  if (!res.ok) return [];
+  const data = (await res.json()) as { signals?: SignalSummary[] };
+  return data.signals ?? [];
+}
+
 /**
  * Global ⌘K / Ctrl-K command palette. Server state (operations, agents) is
  * loaded via TanStack Query only while open, scoped by the active workspace id
@@ -87,6 +108,19 @@ export function CommandMenu() {
     enabled,
     staleTime: 10_000,
   });
+  const { data: signals = [] } = useQuery({
+    queryKey: paletteSignalsKey(workspaceId),
+    queryFn: () => fetchSignals(workspaceId as string),
+    enabled,
+    staleTime: 10_000,
+  });
+
+  // Record the palette action as a Signal (best-effort, fire-and-forget so
+  // navigation is never delayed). The server honors the workspace id only for a
+  // workspace the caller belongs to.
+  const record = (commandId: string) => {
+    void recordCommandAction(commandId, workspaceId ?? undefined);
+  };
 
   const go = (href: Route) => {
     reset();
@@ -94,6 +128,7 @@ export function CommandMenu() {
   };
 
   const runCommand = (command: Command) => {
+    record(command.id);
     const destination = command.href ?? ACTION_ROUTES[command.id as ActionCommandId];
     if (destination) go(destination);
   };
@@ -143,7 +178,10 @@ export function CommandMenu() {
               <CommandItem
                 key={`run-${agent.id}`}
                 value={`run agent ${agent.name}`}
-                onSelect={() => go(`/console/agents/${agent.id}` as Route)}
+                onSelect={() => {
+                  record('run.agent');
+                  go(`/console/agents/${agent.id}` as Route);
+                }}
               >
                 <Play />
                 <span className="flex flex-col">
@@ -163,7 +201,10 @@ export function CommandMenu() {
               <CommandItem
                 key={agent.id}
                 value={`agent ${agent.name}`}
-                onSelect={() => go(`/console/agents/${agent.id}` as Route)}
+                onSelect={() => {
+                  record('open.agent');
+                  go(`/console/agents/${agent.id}` as Route);
+                }}
               >
                 <Bot />
                 <span className="flex flex-col">
@@ -183,7 +224,10 @@ export function CommandMenu() {
               <CommandItem
                 key={op.id}
                 value={`operation ${op.title}`}
-                onSelect={() => go(`/console/operations/${op.id}` as Route)}
+                onSelect={() => {
+                  record('open.operation');
+                  go(`/console/operations/${op.id}` as Route);
+                }}
               >
                 <Activity />
                 <span className="flex flex-col">
@@ -194,6 +238,31 @@ export function CommandMenu() {
                 </span>
               </CommandItem>
             ))}
+          </CommandGroup>
+        )}
+
+        {signals.length > 0 && (
+          <CommandGroup heading="Signals">
+            {signals.map((signal) => {
+              const meta = SEVERITY_META[signal.severity];
+              const Icon = meta.icon;
+              return (
+                <CommandItem
+                  key={signal.id}
+                  value={`signal ${signal.title}`}
+                  onSelect={() => {
+                    record('open.signal');
+                    go(`/console/signals/${signal.id}` as Route);
+                  }}
+                >
+                  <Icon />
+                  <span className="flex flex-col">
+                    <span className="truncate">{signal.title}</span>
+                    <span className="text-muted-foreground text-xs">{meta.label}</span>
+                  </span>
+                </CommandItem>
+              );
+            })}
           </CommandGroup>
         )}
       </CommandList>

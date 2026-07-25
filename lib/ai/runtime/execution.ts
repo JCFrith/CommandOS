@@ -54,6 +54,13 @@ export interface ExecutionContext {
   /** Optional correlation id linking this run to a domain record (e.g. agent). */
   subjectId?: string;
   subjectType?: string;
+  /**
+   * The Signal correlation id for the chain this execution belongs to. When set
+   * (e.g. by the agent service, which mints it at the head of the run), the
+   * runtime tags every execution Signal it emits with this id, so the whole
+   * chain — agent run → runtime → provider → completion — shares one correlation.
+   */
+  correlationId?: string;
 }
 
 /** A typed request to run one execution producing a `T`-shaped structured output. */

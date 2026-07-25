@@ -11,6 +11,65 @@ this file is the terse, versioned log.
 
 _Nothing yet._
 
+## [0.5.0] — 2026-07-25
+
+Sprint 5 — **Signals & Observability Platform**. The platform-wide event and
+observability system: every subsystem now emits **Signals**, the canonical event
+model. Emission is additive
+and behavior-preserving — existing Operations/Agents/runtime behavior, the
+per-feature activity timelines, and the execution logger are unchanged.
+
+### Added
+
+- **Signal domain** (`lib/signals`): append-only `Signal` + `SignalEvent`
+  (acknowledgement/resolution is projected from appended events — the emitted
+  record is never mutated), with `SignalSource`/`SignalSeverity`/`SignalCategory`/
+  `SignalStatus`/`SignalResolution`/`SignalCorrelation`/`SignalSubscription`/
+  `SignalFilter`. A signal-type **catalog**, a `createSignal` factory with
+  **payload sanitization** (redacts secret/prompt keys; bounds size/depth), and
+  shared filter/subscription matching.
+- **SignalBus** (`lib/signals/bus.ts`): reusable in-process publish/subscribe with
+  filtered fan-out, failure isolation + health, and a narrow `SignalPublisher`
+  seam so emitters never depend on consumers. A future distributed bus implements
+  the same interface.
+- **Append-only SignalEventStore** (`lib/signals/store.ts`) + dev in-memory impl;
+  the shared bus/store/publisher are wired in `lib/signals/index.ts` with a
+  built-in persistence subscriber.
+- **Correlation tracking** (`lib/signals/correlation.ts`): one correlation id
+  threads a whole execution chain (agent run → runtime → provider → retry →
+  completion); every emitted signal preserves it automatically.
+- **Timeline engine** (`lib/signals/timeline.ts`), **metrics** (`metrics.ts` —
+  execution counts/success/failure/retry/timeout/cancel, duration, provider
+  latency, tokens, cost, throughput, severity/source/category counts), **health**
+  (`health.ts` — provider/runtime/signal-bus → healthy/warning/degraded/
+  unavailable/unknown), all computed from signals.
+- **Notification framework** (`lib/signals/notification.ts`): interfaces only
+  (`NotificationChannel`/`Message`/`Dispatcher`/`Subscription`/`Rule`) — no
+  delivery, no channel implementations.
+- **`SignalsService`** (`services/signals`): workspace-scoped list/get/timeline/
+  correlations/metrics/health/acknowledge/resolve; every query forcibly scoped to
+  the caller's workspace.
+- **Emission** wired additively into Operations, Agents, the `ExecutionRuntime`
+  (execution lifecycle signals, correlated), auth (succeeded/failed), the command
+  palette (`command.executed`), workspace switch, and permission denials.
+- **Signals surface** (`/console/signals` + `/console/signals/[id]`): health
+  overview, metrics summary, faceted filters, activity feed, correlation view,
+  signal detail with payload + append-only lifecycle + subject timeline; loading
+  and error boundaries. Workspace-scoped `/api/signals` palette feed; ⌘K actions
+  (view/filter signals, runtime & provider health, correlations).
+- Four design docs: `docs/signals.md`, `docs/signal-bus.md`, `docs/observability.md`,
+  `docs/timeline-engine.md`. 51 net-new tests (domain/lifecycle, bus, store,
+  timeline, correlation, metrics, health, service + workspace isolation, and a
+  feature/provider/execution integration suite).
+
+### Changed
+
+- `ExecutionContext` carries an optional `correlationId`; the `ExecutionRuntime`
+  accepts an optional `SignalPublisher` and emits correlated execution signals.
+  `OperationsService`/`AgentService` accept an optional publisher (no-op by
+  default — existing tests and behavior are unchanged). The empty `system`
+  command group now holds the real signal observability commands.
+
 ## [0.4.5] — 2026-07-25
 
 Sprint 4.5 — **AI Runtime & Platform Foundation**. No new end-user features — a
@@ -209,7 +268,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.0
 [0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
 [0.4.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.0
 [0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0

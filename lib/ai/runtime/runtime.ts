@@ -12,6 +12,10 @@ import {
 import { executionLogger, toExecutionLog, type ExecutionLogger } from './logging';
 import { runWithRetry } from './retry';
 import { ProviderError, type ModelProvider, type ModelResponse } from '@/lib/ai/provider/provider';
+import type { SignalPublisher } from '@/lib/signals/bus';
+import type { SignalSeverity } from '@/lib/signals/types';
+import { createSignal, type SignalDeps } from '@/lib/signals/signal';
+import { continueChain } from '@/lib/signals/correlation';
 
 /** Injectable clock / id / sleep / monotonic + logger for determinism + audit. */
 export interface RuntimeDeps {
@@ -43,17 +47,59 @@ const defaultDeps = (): RuntimeDeps => ({
  */
 export class ExecutionRuntime {
   private readonly deps: RuntimeDeps;
+  private readonly signalDeps: SignalDeps;
 
   constructor(
     private readonly provider: ModelProvider,
     deps: Partial<RuntimeDeps> = {},
+    /**
+     * Optional Signal publisher. When provided, the runtime emits execution
+     * lifecycle Signals (started / completed / failed / timed_out / cancelled /
+     * retried) tagged with the request's correlation id, so an execution is
+     * observable on the Signal timeline. Omitted in isolated runtime tests;
+     * wired to the platform bus in production.
+     */
+    private readonly publisher?: SignalPublisher,
   ) {
     this.deps = { ...defaultDeps(), ...deps };
+    this.signalDeps = { id: this.deps.id, now: this.deps.clock };
   }
 
   /** Whether the underlying provider is configured and ready. */
   isAvailable(): boolean {
     return this.provider.isAvailable();
+  }
+
+  /** Emit an execution lifecycle Signal (best-effort — never breaks a run). */
+  private async emitExecutionSignal(
+    context: Execution<unknown>['context'],
+    requestId: string,
+    type: string,
+    summary: string,
+    severity?: SignalSeverity,
+    payload?: Record<string, string | number | boolean>,
+  ): Promise<void> {
+    if (!this.publisher) return;
+    try {
+      const signal = createSignal(
+        {
+          type,
+          workspaceId: context.workspaceId,
+          correlation: continueChain(context.correlationId ?? requestId, null),
+          actorId: context.operatorId,
+          actorName: context.operatorName,
+          summary,
+          subjectType: context.subjectType ?? 'execution',
+          subjectId: context.subjectId ?? requestId,
+          severity,
+          payload,
+        },
+        this.signalDeps,
+      );
+      await this.publisher.publish(signal);
+    } catch {
+      // Observability must never break the execution.
+    }
   }
 
   async run<T>(request: ExecutionRequest<T>): Promise<Execution<T>> {
@@ -87,24 +133,40 @@ export class ExecutionRuntime {
     let response: ModelResponse | null = null;
     let attempts = 1;
     let error: ExecutionError | null = null;
+    let providerLatencyMs = 0;
+    const retryDelays: number[] = [];
+
+    await this.emitExecutionSignal(
+      request.context,
+      request.id,
+      'execution.started',
+      'Execution started',
+      'trace',
+    );
 
     try {
       emit('started', 'pending');
       emit('started', 'running');
       const messages = request.conversation.toMessages();
       const result = await runWithRetry(
-        (attempt) => {
+        async (attempt) => {
           attempts = attempt; // captured even if this attempt ultimately throws
-          return this.provider.complete(
-            {
-              messages,
-              structuredOutput: this.provider.capabilities().structuredOutput
-                ? request.outputSpec
-                : undefined,
-              timeoutMs: request.timeoutMs,
-            },
-            combined.token.signal,
-          );
+          const callStarted = monotonic();
+          try {
+            return await this.provider.complete(
+              {
+                messages,
+                structuredOutput: this.provider.capabilities().structuredOutput
+                  ? request.outputSpec
+                  : undefined,
+                timeoutMs: request.timeoutMs,
+              },
+              combined.token.signal,
+            );
+          } finally {
+            // Latency of the last (settled) provider call — a real measurement.
+            providerLatencyMs = Math.max(0, Math.round(monotonic() - callStarted));
+          }
         },
         request.retryPolicy,
         {
@@ -112,8 +174,10 @@ export class ExecutionRuntime {
           sleep,
           isRetryable: (e) =>
             e instanceof ProviderError && e.retryable && !combined.token.isCancelled,
-          onRetry: (attempt, delayMs) =>
-            emit('retrying', 'running', `attempt ${attempt} in ${delayMs}ms`),
+          onRetry: (attempt, delayMs) => {
+            emit('retrying', 'running', `attempt ${attempt} in ${delayMs}ms`);
+            retryDelays.push(delayMs);
+          },
         },
       );
       response = result.value;
@@ -182,7 +246,76 @@ export class ExecutionRuntime {
     };
 
     await logger.record(toExecutionLog(execution));
+
+    // Emit retry + terminal execution Signals (best-effort, after logging so the
+    // durable log is written even if emission is a no-op). Ordered so the chain
+    // reads started → retried… → terminal.
+    for (let i = 0; i < retryDelays.length; i++) {
+      await this.emitExecutionSignal(
+        request.context,
+        request.id,
+        'execution.retried',
+        `Retry attempt ${i + 2}`,
+        'notice',
+        { attempt: i + 2, delayMs: retryDelays[i]! },
+      );
+    }
+    const terminal = terminalSignal(execution.status);
+    if (terminal) {
+      await this.emitExecutionSignal(
+        request.context,
+        request.id,
+        terminal.type,
+        terminal.summary(execution),
+        terminal.severity,
+        {
+          outcome: execution.status,
+          durationMs: latencyMs,
+          providerLatencyMs,
+          attempts,
+          retries: Math.max(0, attempts - 1),
+          totalTokens: usage.totalTokens,
+          costUsd: execution.metadata.cost.amount,
+          estimated: usage.estimated || execution.metadata.cost.estimated,
+        },
+      );
+    }
+
     return execution;
+  }
+}
+
+/** Map an execution's terminal status to the Signal it emits. */
+function terminalSignal(
+  status: ExecutionStatus,
+): { type: string; severity: SignalSeverity; summary: (e: Execution<unknown>) => string } | null {
+  switch (status) {
+    case 'completed':
+      return {
+        type: 'execution.completed',
+        severity: 'info',
+        summary: (e) => `Execution completed in ${e.metadata.latencyMs}ms`,
+      };
+    case 'failed':
+      return {
+        type: 'execution.failed',
+        severity: 'error',
+        summary: (e) => `Execution failed: ${e.error?.message ?? 'unknown error'}`,
+      };
+    case 'timed_out':
+      return {
+        type: 'execution.timed_out',
+        severity: 'error',
+        summary: () => 'Execution timed out',
+      };
+    case 'cancelled':
+      return {
+        type: 'execution.cancelled',
+        severity: 'warning',
+        summary: () => 'Execution cancelled',
+      };
+    default:
+      return null;
   }
 }
 

@@ -18,6 +18,11 @@ import {
   canManageOperation,
   canViewOperations,
 } from '@/lib/operations/permissions';
+import type { SignalPublisher } from '@/lib/signals/bus';
+import { signalPublisher } from '@/lib/signals';
+import { rootCorrelation } from '@/lib/signals/correlation';
+import type { SignalSeverity } from '@/lib/signals/types';
+import { makeEmitter, noopPublisher, type SignalEmit } from '@/services/signals/emit';
 import type { OperationsRepository } from './operations-repository';
 import { operationsRepository } from './in-memory-operations-repository';
 
@@ -57,10 +62,16 @@ const defaultDeps: ServiceDeps = {
  * backing store swaps without touching this logic.
  */
 export class OperationsService {
+  /** Best-effort Signal emitter (see {@link makeEmitter}). */
+  private readonly emit: SignalEmit;
+
   constructor(
     private readonly repo: OperationsRepository = operationsRepository,
     private readonly deps: ServiceDeps = defaultDeps,
-  ) {}
+    publisher: SignalPublisher = noopPublisher,
+  ) {
+    this.emit = makeEmitter(publisher, this.deps);
+  }
 
   /** Operations in the caller's workspace, most-recently-updated first. */
   async list(ctx: OperationsContext): Promise<Operation[]> {
@@ -79,11 +90,14 @@ export class OperationsService {
 
   /** Create an operation in `draft`, recording a `created` activity entry. */
   async create(ctx: OperationsContext, input: unknown): Promise<Operation> {
-    this.assert(
-      canCreateOperation(ctx.workspace),
-      'forbidden',
-      'You do not have permission to create operations.',
-    );
+    if (!canCreateOperation(ctx.workspace)) {
+      await this.deny(
+        ctx,
+        null,
+        'create operation',
+        'You do not have permission to create operations.',
+      );
+    }
     const data = this.parse(createOperationSchema, input);
     const timestamp = this.deps.now();
 
@@ -102,17 +116,23 @@ export class OperationsService {
 
     const created = await this.repo.create(operation);
     await this.record(ctx, created, 'created', 'created this operation');
+    await this.signal(ctx, 'operation.created', created, `created "${created.title}"`, {
+      payload: { priority: created.priority, status: created.status },
+    });
     return created;
   }
 
   /** Edit an operation's editable fields (title, description, priority). */
   async update(ctx: OperationsContext, id: string, input: unknown): Promise<Operation> {
     const existing = await this.get(ctx, id);
-    this.assert(
-      canManageOperation(ctx.user, ctx.workspace, existing),
-      'forbidden',
-      'You do not have permission to edit this operation.',
-    );
+    if (!canManageOperation(ctx.user, ctx.workspace, existing)) {
+      await this.deny(
+        ctx,
+        existing.id,
+        'edit operation',
+        'You do not have permission to edit this operation.',
+      );
+    }
     if (isTerminal(existing.status)) {
       throw new OperationError('locked', 'Archived operations are read-only.');
     }
@@ -138,17 +158,23 @@ export class OperationsService {
 
     const saved = await this.repo.update(updated);
     await this.record(ctx, saved, 'updated', `updated ${changed.join(', ')}`);
+    await this.signal(ctx, 'operation.updated', saved, `updated ${changed.join(', ')}`, {
+      payload: { changed },
+    });
     return saved;
   }
 
   /** Transition an operation's status, enforcing the state machine. */
   async transition(ctx: OperationsContext, id: string, input: unknown): Promise<Operation> {
     const existing = await this.get(ctx, id);
-    this.assert(
-      canManageOperation(ctx.user, ctx.workspace, existing),
-      'forbidden',
-      'You do not have permission to change this operation.',
-    );
+    if (!canManageOperation(ctx.user, ctx.workspace, existing)) {
+      await this.deny(
+        ctx,
+        existing.id,
+        'transition operation',
+        'You do not have permission to change this operation.',
+      );
+    }
     const { to } = this.parse(transitionOperationSchema, input);
 
     if (to === existing.status) return existing;
@@ -174,6 +200,14 @@ export class OperationsService {
       `moved from ${statusLabel(existing.status)} to ${statusLabel(to)}`,
       existing.status,
       to,
+    );
+    const archived = to === 'archived';
+    await this.signal(
+      ctx,
+      archived ? 'operation.archived' : 'operation.status_changed',
+      saved,
+      `moved from ${statusLabel(existing.status)} to ${statusLabel(to)}`,
+      { payload: { from: existing.status, to } },
     );
     return saved;
   }
@@ -227,6 +261,52 @@ export class OperationsService {
   private assert(ok: boolean, code: OperationErrorCode, message: string): void {
     if (!ok) throw new OperationError(code, message);
   }
+
+  /** Emit a workspace-scoped lifecycle Signal for an operation (best-effort). */
+  private async signal(
+    ctx: OperationsContext,
+    type: string,
+    operation: Operation,
+    summary: string,
+    extra?: {
+      severity?: SignalSeverity;
+      payload?: Record<string, string | number | boolean | string[]>;
+    },
+  ): Promise<void> {
+    await this.emit({
+      type,
+      workspaceId: operation.workspaceId,
+      correlation: rootCorrelation(this.deps.id()),
+      actorId: ctx.user.id,
+      actorName: ctx.user.displayName,
+      summary,
+      subjectType: 'operation',
+      subjectId: operation.id,
+      severity: extra?.severity,
+      payload: extra?.payload,
+    });
+  }
+
+  /** Emit a PermissionDenied Signal and throw a forbidden error (never returns). */
+  private async deny(
+    ctx: OperationsContext,
+    subjectId: string | null,
+    action: string,
+    message: string,
+  ): Promise<never> {
+    await this.emit({
+      type: 'authz.permission_denied',
+      workspaceId: ctx.workspace.id,
+      correlation: rootCorrelation(this.deps.id()),
+      actorId: ctx.user.id,
+      actorName: ctx.user.displayName,
+      summary: `denied: ${action}`,
+      subjectType: 'operation',
+      subjectId,
+      payload: { action, resource: 'operation' },
+    });
+    throw new OperationError('forbidden', message);
+  }
 }
 
 function normalizeDescription(value: string | undefined): string | null {
@@ -234,5 +314,12 @@ function normalizeDescription(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** The shared service instance, backed by the active repository. */
-export const operationsService = new OperationsService();
+/**
+ * The shared service instance, backed by the active repository and publishing
+ * lifecycle Signals through the platform bus.
+ */
+export const operationsService = new OperationsService(
+  operationsRepository,
+  defaultDeps,
+  signalPublisher,
+);

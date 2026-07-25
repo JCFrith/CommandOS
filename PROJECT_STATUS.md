@@ -1,15 +1,21 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 4.5 — AI Runtime & Platform release (`v0.4.5`)._
+_Last updated at the Sprint 5 — Signals & Observability release (`v0.5.0`)._
 
 ## Current Sprint
 
-**Sprint 4.5 — AI Runtime & Platform Foundation** ✅ complete — reviewed, merged
-to `main`, tagged `v0.4.5`. Introduces the shared AI runtime platform;
-`ModelProvider` and `ExecutionRuntime` are the canonical platform contracts.
-Sprint 4 — Agents & AI ✅ (`v0.4.0`, `d30711e`) · Sprint 3 — Operations ✅
-(`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅ (`v0.2.0`, `cef73ef`) ·
-Sprint 1 ✅ (`fed69e6`) · Sprint 0 ✅ (`f4809c0`).
+**Sprint 5 — Signals & Observability Platform** ✅ complete — reviewed, merged to
+`main`, tagged `v0.5.0`. The platform-wide event and observability system: every
+subsystem emits **Signals**, the canonical event model, distributed by a reusable
+`SignalBus` into an append-only `SignalEventStore`, with correlation tracking, a
+timeline engine, metrics, health, and a subscription engine. Emission is additive
+and behavior-preserving.
+
+**Sprint 4.5 — AI Runtime & Platform Foundation** ✅ complete — merged to `main`,
+tagged `v0.4.5`. `ModelProvider` and `ExecutionRuntime` are the canonical AI
+platform contracts. Sprint 4 — Agents & AI ✅ (`v0.4.0`, `d30711e`) · Sprint 3 —
+Operations ✅ (`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅ (`v0.2.0`,
+`cef73ef`) · Sprint 1 ✅ (`fed69e6`) · Sprint 0 ✅ (`f4809c0`).
 
 > **Release chain:** `v0.4.0` contains Sprint 4 (Agents & AI); `v0.4.5` adds the
 > Sprint 4.5 AI runtime platform. Streaming, MCP, queues, background workers,
@@ -126,13 +132,48 @@ timed_out}` status machine (D-451/452)
   identical (D-456). Docs: `docs/ai-runtime.md`, `runtime.md`,
   `execution-model.md`, `tool-framework.md`. **31 net-new platform tests**
 
+### Sprint 5 — Signals & Observability Platform
+
+_Platform sprint — additive & behavior-preserving; existing functionality unchanged._
+
+- **Signal domain** (`lib/signals`): append-only `Signal` + `SignalEvent`
+  (ack/resolution projected from appended events, never mutated), with
+  `SignalSource`/`Severity`/`Category`/`Status`/`Resolution`/`Correlation`/
+  `Subscription`/`Filter`; a signal-type catalog; a `createSignal` factory with
+  **payload sanitization** (redacts secret/prompt keys; bounds size/depth); shared
+  filter + subscription matching (D-502)
+- **SignalBus** (`lib/signals/bus.ts`): reusable in-process publish/subscribe —
+  filtered fan-out, failure isolation + health, a narrow `SignalPublisher` seam
+  (emitters never depend on consumers). Distributed transport fits the same
+  interface (D-503)
+- **Append-only `SignalEventStore`** + dev in-memory impl; shared bus/store/
+  publisher wired with a persistence subscriber (`lib/signals/index.ts`)
+- **Correlation** (`lib/signals/correlation.ts`): one id threads a whole run
+  chain (agent → runtime → provider → retry → completion); preserved
+  automatically on every signal (D-504)
+- **Timeline engine** (`timeline.ts`), **metrics** (`metrics.ts`), **health**
+  (`health.ts`) — all computed from Signals; honest estimates + `unavailable`
+  states, never fabricated (D-505)
+- **Notification framework** (`notification.ts`): interfaces only — no delivery,
+  no channels (D-506, TD-22)
+- **`SignalsService`** (`services/signals`): workspace-scoped list/get/timeline/
+  correlations/metrics/health/acknowledge/resolve — every query forcibly scoped
+- **Emission** wired additively into Operations, Agents, the `ExecutionRuntime`,
+  auth, the command palette, workspace switch, and permission denials
+- **Signals surfaces** (`/console/signals`, `/console/signals/[id]`): health,
+  metrics, faceted filters, activity feed, correlation view, signal detail with
+  payload + append-only lifecycle + subject timeline; `/api/signals` palette feed;
+  ⌘K signal/health/correlation actions
+- Four design docs (`docs/signals.md`, `signal-bus.md`, `observability.md`,
+  `timeline-engine.md`); **51 net-new tests**
+
 ## Build Status
 
-| Gate                | Result                                             |
-| ------------------- | -------------------------------------------------- |
-| `npm run lint`      | ✅ No ESLint warnings or errors                    |
-| `npm run typecheck` | ✅ `tsc --noEmit` clean                            |
-| `npm run build`     | ✅ compiled; 18 app routes (unchanged — no new UI) |
+| Gate                | Result                                                                |
+| ------------------- | --------------------------------------------------------------------- |
+| `npm run lint`      | ✅ No ESLint warnings or errors                                       |
+| `npm run typecheck` | ✅ `tsc --noEmit` clean                                               |
+| `npm run build`     | ✅ compiled; 20 app routes (+`/api/signals`, `/console/signals/[id]`) |
 
 Runtime smoke (Sprint 4.5): existing routes render unchanged (`/console/agents`,
 `/console/agents/new`, `/api/agents`, `/console/operations`, `/api/operations`,
@@ -145,10 +186,20 @@ unavailable) — all pass.
 
 ## Test Status
 
-| Suite            | Result                                                      |
-| ---------------- | ----------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 145 passing across 28 files (31 net-new for the runtime) |
-| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)  |
+| Suite            | Result                                                     |
+| ---------------- | ---------------------------------------------------------- |
+| Unit (Vitest)    | ✅ 196 passing across 37 files (51 net-new for Signals)    |
+| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
+
+Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired
+`SignalBus` + append-only `SignalEventStore` + `SignalsService`** with feature
+services over a `FakeModelProvider` — 23 checks pass: operations/agents/runtime
+emission → persistence → read path, execution-chain **correlation** (one id),
+timeline + correlation view, metrics (1 completed run, 100% success, tokens not
+redacted), health (provider/runtime healthy, honest provider `unavailable` signal
+separately), **permission-denied** emission, provider-unavailable (no fabricated
+run), and **workspace isolation** (another workspace sees none; cross-workspace
+get blocked).
 
 ## Technical Debt Audit (post-Sprint 1)
 
@@ -300,11 +351,40 @@ Sprint-4 agent tests pass unchanged; existing routes render identically.
   remain untested here (no key) — the honest unavailable path is covered.
 - Carried: no global AI rate limiting (TD-15); persistence deferral (D-302).
 
+## Sprint 5 Review & Known Limitations
+
+Reviewed every Sprint 5 change for architecture, security, and code quality.
+**Verified:** no UI component or repository publishes directly (feature services
+publish → bus → append-only store); emitters depend only on the narrow
+`SignalPublisher` seam (nothing depends on downstream consumers); emission is
+best-effort and never alters a use case's result (existing Operations/Agents/
+runtime tests pass unchanged); every `SignalsService` query is forcibly scoped to
+`ctx.workspace.id` (cross-workspace read/get/correlate/resolve blocked, tested);
+subscriptions can't cross workspaces; payloads are sanitized (secret/prompt keys
+redacted — `totalTokens`/`promptVersion` preserved); auth-failure signals are
+`system`-scoped and PII-free; correlation is minted once and preserved across the
+chain; metrics/health are computed from signals with honest estimates and an
+honest provider `unavailable` state; the notification framework is interface-only.
+
+**Known limitations (see `DECISIONS.md` / `TECH_DEBT.md`):**
+
+- **Dev-only stores (TD-21).** The `SignalEventStore` + `SignalBus` are in-memory
+  and in-process (per-worker, TD-09). The durable store + distributed transport
+  implement the existing interfaces.
+- **Notifications interface-only (TD-22, D-506).** No delivery, no channels.
+- **Per-feature timelines not yet unified (TD-23, D-501).** Operations/agents
+  detail pages keep their existing activity timelines; only the Signals surfaces
+  use the signal-derived engine, to preserve merged behavior exactly.
+- **Palette/list read in memory (TD-24).** Server-side search/pagination lands
+  with the durable store.
+- Carried: persistence deferral (D-302), no global AI rate limiting (TD-15).
+
 ## Next Sprint
 
-**Sprint 5 — Signals & Observability** (not started)
+**Sprint 6 — Workflows & Automation** (planned, not started)
 
-- Telemetry/signals surface; Supabase realtime subscriptions
-
-> Sprint 4.5 is complete on its branch but **not merged, not tagged**. Sprint 5
-> has **not** been started.
+> Sprint 5 is merged to `main` and tagged `v0.5.0`. A detailed Sprint 6
+> architecture + implementation plan (workflow domain/execution model, triggers,
+> conditions, branching, variables, approvals, scheduling, retries, manual
+> intervention, cancellation, resumability, audit, and Signal/AI/Operations/Agent
+> integration) is prepared; **no Sprint 6 code has been written.**

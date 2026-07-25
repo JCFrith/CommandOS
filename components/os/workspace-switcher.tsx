@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/components/os/workspace-provider';
+import { recordWorkspaceChangeAction } from '@/app/console/signals/actions';
 
 /**
  * Switches the active workspace. Today every operator has a single personal
@@ -22,6 +23,13 @@ export function WorkspaceSwitcher() {
   const { workspaces, current, setCurrent } = useWorkspace();
 
   if (!current) return null;
+
+  // Only a real switch (to a different workspace) emits a WorkspaceChanged
+  // Signal — selecting the current workspace is inert (no fabricated event).
+  const select = (workspaceId: string) => {
+    if (workspaceId !== current.id) void recordWorkspaceChangeAction(workspaceId);
+    setCurrent(workspaceId);
+  };
 
   return (
     <DropdownMenu>
@@ -37,7 +45,7 @@ export function WorkspaceSwitcher() {
         {workspaces.map((workspace) => (
           <DropdownMenuItem
             key={workspace.id}
-            onSelect={() => setCurrent(workspace.id)}
+            onSelect={() => select(workspace.id)}
             className="gap-2"
           >
             <span className="bg-primary/15 text-primary grid size-5 shrink-0 place-items-center rounded text-[10px] font-semibold uppercase">
