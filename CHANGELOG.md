@@ -9,7 +9,36 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet — Sprint 3 (Operations) has not started._
+Sprint 3 — **Operations**. Implemented on branch `sprint-3-operations` (not yet
+merged or tagged). The complete Operations vertical slice on a development
+in-memory store, behind the repository/service boundaries.
+
+### Added
+
+- Workspace-scoped `Operation` domain model (title, description, priority,
+  lifecycle status, audit fields) and an immutable `OperationActivity` timeline.
+- Lifecycle state machine transcribed from `33_STATE_MACHINE_SPECIFICATION.md`:
+  `draft → planned → in_progress ⇄ blocked`, `in_progress → completed → archived`.
+  Invalid transitions are rejected; every transition is recorded as activity.
+- `OperationsRepository` interface with a labelled **development-only in-memory
+  implementation** (the Supabase adapter is deferred with the operations migration).
+- Operations service layer: use cases with Zod validation, RBAC + ownership
+  permissions, lifecycle enforcement, and workspace scoping.
+- Server Actions for create, edit, and status transition (revalidation +
+  redirects); all authorization and validation enforced server-side.
+- Operations surfaces: list (with empty state), detail (with activity timeline
+  and lifecycle controls), create, and edit — plus loading and error boundaries.
+- ⌘K command-palette actions to create, find, and open operations (live feed via
+  TanStack Query against a new workspace-scoped `/api/operations` route).
+- shadcn `textarea` primitive.
+- 43 unit/component tests (state machine, permissions, schema, repository,
+  service workflows, command registration, and the operation form).
+
+### Changed
+
+- The `Operation` type and `OperationsRepository` interface were replaced (the
+  Sprint-0 `{id,title,status}` scaffold → the full workspace-scoped model).
+- The `create.operation` palette action now opens `/console/operations/new`.
 
 ## [0.2.0] — 2026-07-24
 
