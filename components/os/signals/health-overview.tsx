@@ -28,7 +28,6 @@ export function HealthOverview({ health }: { health: PlatformHealth }) {
       <ul className="mt-4 grid gap-3 sm:grid-cols-3">
         {health.subsystems.map((subsystem) => {
           const meta = HEALTH_META[subsystem.status];
-          const Icon = meta.icon;
           return (
             <li
               key={subsystem.subsystem}
@@ -48,7 +47,6 @@ export function HealthOverview({ health }: { health: PlatformHealth }) {
               <p className="text-muted-foreground mt-1.5 text-xs leading-snug">
                 {subsystem.detail}
               </p>
-              <Icon className="sr-only" aria-hidden />
             </li>
           );
         })}

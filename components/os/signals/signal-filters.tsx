@@ -38,7 +38,7 @@ export function SignalFilters() {
             onClick={() => set('view', option === 'activity' ? '' : option)}
             className={cn(
               'rounded-md px-2.5 py-1 font-medium capitalize transition-colors',
-              view === option || (option === 'activity' && view === 'activity')
+              view === option
                 ? 'bg-primary/15 text-primary'
                 : 'text-muted-foreground hover:text-foreground',
             )}
