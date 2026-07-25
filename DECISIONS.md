@@ -244,6 +244,23 @@ gates (authz / executable / unavailable / duplicate), and honest unavailable
 state. Verified by the preserved agent tests + a runtime smoke; the only visible
 change is internal (execution now flows through the runtime).
 
+## Release confirmations (2026-07-25 — v0.4.0 / v0.4.5)
+
+Confirmed by the product owner at the two-phase release:
+
+- **Merge sequence.** `sprint-4-agents-ai` merged into `main` first (**v0.4.0**),
+  then `sprint-4.5-ai-runtime` merged into the updated `main` (**v0.4.5**). Both
+  are **non-fast-forward** merges; feature branches are **not squashed** and their
+  commit history is preserved.
+- **D-453 approved — `ModelProvider` is the canonical AI provider boundary.** The
+  removed agent-specific `AIProvider` is **not** to be restored. Future AI
+  capabilities integrate through `ModelProvider` + `ExecutionRuntime` unless a
+  later ADR explicitly changes that architecture.
+- **D-455 approved — streaming, MCP, background execution, scheduling, queues,
+  workers, and job storage remain interface-only** in Sprint 4.5. No production
+  implementation is added in this release; **TD-19 and TD-20 stay open** (and
+  accurately documented), alongside TD-18 (dev-only execution logging).
+
 ## How to use this log
 
 - Add a dated, numbered entry (`D-2xx`) when a non-obvious choice is made.

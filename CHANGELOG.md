@@ -9,10 +9,16 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 4.5 — **AI Runtime & Platform Foundation**. Implemented on branch
-`sprint-4.5-ai-runtime` (based on Sprint 4; not merged or tagged). No new
-end-user features — a reusable AI execution platform, with agents refactored onto
-it and behavior unchanged.
+_Nothing yet._
+
+## [0.4.5] — 2026-07-25
+
+Sprint 4.5 — **AI Runtime & Platform Foundation**. No new end-user features — a
+reusable AI execution platform, with agents refactored onto it and behavior
+unchanged. `ModelProvider` and `ExecutionRuntime` are the canonical AI platform
+contracts. Streaming, MCP, queues, background workers, schedulers, and job stores
+remain **contracts only**; in-memory execution logging and feature persistence
+remain **development-only** (TD-18, TD-19, TD-20 open).
 
 ### Added
 
@@ -51,11 +57,12 @@ it and behavior unchanged.
   `buildInvocation`/`systemPromptFor` with the generic platform equivalents;
   moved the agent result schema to `lib/agents/result-schema.ts`.
 
----
+## [0.4.0] — 2026-07-25
 
-Sprint 4 — **Agents & AI**. Implemented on branch `sprint-4-agents-ai` (not
-merged or tagged). The Agents vertical slice with an AI execution workflow behind
-a provider interface, on the development in-memory store.
+Sprint 4 — **Agents & AI**. The Agents vertical slice with an AI execution
+workflow behind a provider interface, on the development in-memory store. _(The
+provider boundary is superseded by the Sprint 4.5 `ModelProvider`/`ExecutionRuntime`
+platform; agent behavior is unchanged.)_
 
 ### Added
 
@@ -202,6 +209,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
+[0.4.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.0
 [0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0
 [0.2.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.2.0

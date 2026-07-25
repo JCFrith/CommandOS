@@ -6,6 +6,22 @@ stable interfaces. It follows the `UI → Service → Adapter → Provider` rule
 `04_API_SPECIFICATION.md`: **UI never calls a model provider; no raw provider
 response reaches the UI.**
 
+## Release status
+
+- **v0.4.0** contains Sprint 4 — **Agents & AI** (the agents vertical slice on a
+  provider interface).
+- **v0.4.5** introduces this shared **AI Runtime platform** and refactors agents
+  onto it (behavior unchanged).
+- **`ModelProvider`** and **`ExecutionRuntime`** are the **canonical** AI platform
+  contracts. Future AI capabilities integrate through them (unless a later ADR
+  changes the architecture).
+- **Contracts only** (no production implementation this release): streaming
+  (`StreamingModelProvider`), MCP (`Transport`/`CapabilityDiscovery`/`ToolAdapter`/
+  `ConnectionLifecycle`/`McpRegistration`), and background execution
+  (`ExecutionQueue`/`BackgroundWorker`/`Scheduler`/`JobStore`) — TD-19.
+- **Development-only**: `InMemoryExecutionLogger` and all feature repositories
+  (TD-18); tool-calling is not yet wired into the runtime (TD-20).
+
 ## Layers
 
 ```

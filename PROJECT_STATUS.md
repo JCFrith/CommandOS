@@ -1,17 +1,20 @@
 # PROJECT_STATUS
 
-_Last updated during Sprint 4.5 — AI Runtime & Platform (branch `sprint-4.5-ai-runtime`, not merged)._
+_Last updated at the Sprint 4.5 — AI Runtime & Platform release (`v0.4.5`)._
 
 ## Current Sprint
 
-**Sprint 4.5 — AI Runtime & Platform Foundation** 🚧 implemented on branch
-`sprint-4.5-ai-runtime` (based on Sprint 4; not merged, not tagged).
-Sprint 4 — Agents & AI ✅ (branch `sprint-4-agents-ai`, approved, unmerged) ·
-Sprint 3 — Operations ✅ (`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅
-(`v0.2.0`, `cef73ef`) · Sprint 1 ✅ (`fed69e6`) · Sprint 0 ✅ (`f4809c0`).
+**Sprint 4.5 — AI Runtime & Platform Foundation** ✅ complete — reviewed, merged
+to `main`, tagged `v0.4.5`. Introduces the shared AI runtime platform;
+`ModelProvider` and `ExecutionRuntime` are the canonical platform contracts.
+Sprint 4 — Agents & AI ✅ (`v0.4.0`, `d30711e`) · Sprint 3 — Operations ✅
+(`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅ (`v0.2.0`, `cef73ef`) ·
+Sprint 1 ✅ (`fed69e6`) · Sprint 0 ✅ (`f4809c0`).
 
-> **Branch chain:** `sprint-4.5-ai-runtime` builds on `sprint-4-agents-ai`, which
-> is not yet on `main`. Merge Sprint 4 first (or merge the chain in order).
+> **Release chain:** `v0.4.0` contains Sprint 4 (Agents & AI); `v0.4.5` adds the
+> Sprint 4.5 AI runtime platform. Streaming, MCP, queues, background workers,
+> schedulers, and job stores remain **contracts only**; in-memory execution
+> logging and feature persistence remain **development-only** (TD-18/19/20 open).
 
 ## Completed Features
 
