@@ -2,11 +2,46 @@ import { describe, expect, it } from 'vitest';
 
 import { InMemoryAgentRepository } from '@/services/agents/in-memory-agent-repository';
 import { AgentService, type AgentContext, type ServiceDeps } from '@/services/agents/agent-service';
-import { FakeAIProvider, type FakeMode } from '@/lib/ai/fake-provider';
+import { ExecutionRuntime } from '@/lib/ai/runtime/runtime';
+import { FakeModelProvider } from '@/lib/ai/provider/fake';
+import { ProviderError } from '@/lib/ai/provider/provider';
+import type { ExecutionLogger } from '@/lib/ai/runtime/logging';
 import type { AuthUser, Workspace, WorkspaceRole } from '@/types';
 
 const user: AuthUser = { id: 'u-1', email: null, displayName: 'Ada', avatarUrl: null };
 const other: AuthUser = { id: 'u-2', email: null, displayName: 'Bo', avatarUrl: null };
+
+/** A valid agent structured result, as a provider would return it. */
+const AGENT_OK = JSON.stringify({
+  summary: 'ok',
+  keyPoints: ['a'],
+  risks: [],
+  recommendations: ['b'],
+  confidence: 'medium',
+});
+
+type Scenario = 'success' | 'invalid_output' | 'timeout' | 'failed' | 'unavailable';
+
+function providerFor(scenario: Scenario): FakeModelProvider {
+  switch (scenario) {
+    case 'success':
+      return new FakeModelProvider({ content: AGENT_OK });
+    case 'invalid_output':
+      return new FakeModelProvider({ content: '{"nope":true}' });
+    case 'timeout':
+      return new FakeModelProvider({
+        failWith: new ProviderError('timeout', 'CMD-AI-003', 'slow', true),
+      });
+    case 'failed':
+      return new FakeModelProvider({
+        failWith: new ProviderError('failed', 'CMD-AI-002', 'boom', true),
+      });
+    case 'unavailable':
+      return new FakeModelProvider({ available: false });
+  }
+}
+
+const noopLogger: ExecutionLogger = { record: async () => {}, listByWorkspace: async () => [] };
 
 function ctxFor(u: AuthUser, role: WorkspaceRole = 'owner', workspaceId = 'ws-1'): AgentContext {
   const workspace: Workspace = { id: workspaceId, name: 'W', slug: 'w', role, kind: 'personal' };
@@ -22,13 +57,13 @@ function deterministicDeps(): ServiceDeps {
   };
 }
 
-/** A service wired with an in-memory repo + a fake AI provider in the given mode. */
-function makeService(aiMode: FakeMode = 'success', aiAvailable = true) {
-  return new AgentService(
-    new InMemoryAgentRepository(),
-    new FakeAIProvider(aiMode, aiAvailable),
-    deterministicDeps(),
-  );
+/** A service wired with an in-memory repo + a runtime over a fake provider. */
+function makeService(scenario: Scenario = 'success', repo = new InMemoryAgentRepository()) {
+  const runtime = new ExecutionRuntime(providerFor(scenario), {
+    sleep: async () => {},
+    logger: noopLogger,
+  });
+  return new AgentService(repo, runtime, deterministicDeps());
 }
 
 async function activeAgent(svc: AgentService, ctx = ctxFor(user)) {
@@ -47,8 +82,7 @@ describe('AgentService — definition lifecycle', () => {
       capabilities: ['summarize'],
     });
     expect(agent).toMatchObject({ status: 'draft', workspaceId: 'ws-1', createdBy: 'u-1' });
-    const activity = await svc.activity(ctx, agent.id);
-    expect(activity[0]).toMatchObject({ type: 'created' });
+    expect((await svc.activity(ctx, agent.id))[0]).toMatchObject({ type: 'created' });
   });
 
   it('rejects invalid input', async () => {
@@ -65,8 +99,7 @@ describe('AgentService — definition lifecycle', () => {
     await expect(svc.transition(ctx, agent.id, { to: 'paused' })).rejects.toMatchObject({
       code: 'invalid_transition',
     });
-    const activated = await svc.transition(ctx, agent.id, { to: 'active' });
-    expect(activated.status).toBe('active');
+    expect((await svc.transition(ctx, agent.id, { to: 'active' })).status).toBe('active');
   });
 
   it('locks archived agents against edits', async () => {
@@ -102,7 +135,7 @@ describe('AgentService — definition lifecycle', () => {
   });
 });
 
-describe('AgentService.execute', () => {
+describe('AgentService.execute (via the runtime)', () => {
   it('runs an active agent and records a completed execution + activity', async () => {
     const svc = makeService('success');
     const ctx = ctxFor(user);
@@ -112,27 +145,25 @@ describe('AgentService.execute', () => {
     expect(exec.status).toBe('completed');
     expect(exec.result?.confidence).toBe('medium');
     expect(exec.model).toBe('fake-model');
+    expect(exec.promptVersion).toBeTruthy();
 
-    const executions = await svc.listExecutions(ctx, agent.id);
-    expect(executions).toHaveLength(1);
-    const activity = await svc.activity(ctx, agent.id);
-    expect(activity[0]).toMatchObject({ type: 'executed' });
+    expect(await svc.listExecutions(ctx, agent.id)).toHaveLength(1);
+    expect((await svc.activity(ctx, agent.id))[0]).toMatchObject({ type: 'executed' });
   });
 
-  it('surfaces an honest unavailable error when AI is not configured (no fake success)', async () => {
-    const svc = makeService('success', /* aiAvailable */ false);
+  it('surfaces an honest unavailable error when AI is not configured (no fabrication)', async () => {
+    const svc = makeService('unavailable');
     const ctx = ctxFor(user);
     const agent = await activeAgent(svc, ctx);
     await expect(svc.execute(ctx, agent.id, { input: 'go' })).rejects.toMatchObject({
       code: 'unavailable',
     });
-    // Nothing fabricated.
     expect(await svc.listExecutions(ctx, agent.id)).toHaveLength(0);
   });
 
-  it('records a FAILED execution (not a throw) on provider timeout/failure/invalid output', async () => {
-    for (const mode of ['timeout', 'failed', 'invalid_output'] as const) {
-      const svc = makeService(mode);
+  it('records a FAILED execution (not a throw) on timeout / failure / invalid output', async () => {
+    for (const scenario of ['timeout', 'failed', 'invalid_output'] as const) {
+      const svc = makeService(scenario);
       const ctx = ctxFor(user);
       const agent = await activeAgent(svc, ctx);
       const exec = await svc.execute(ctx, agent.id, { input: 'go' });
@@ -162,7 +193,9 @@ describe('AgentService.execute', () => {
     const agent = await activeAgent(svc, ctx);
     await expect(
       svc.execute(ctxFor(other, 'member'), agent.id, { input: 'go' }),
-    ).rejects.toMatchObject({ code: 'forbidden' });
+    ).rejects.toMatchObject({
+      code: 'forbidden',
+    });
     await expect(
       svc.execute(ctxFor(user, 'owner', 'ws-2'), agent.id, { input: 'go' }),
     ).rejects.toMatchObject({ code: 'not_found' });
@@ -170,10 +203,9 @@ describe('AgentService.execute', () => {
 
   it('rejects a duplicate submission while a run is in progress', async () => {
     const repo = new InMemoryAgentRepository();
-    const svc = new AgentService(repo, new FakeAIProvider('success'), deterministicDeps());
+    const svc = makeService('success', repo);
     const ctx = ctxFor(user);
     const agent = await activeAgent(svc, ctx);
-    // Seed an in-flight execution.
     await repo.createExecution({
       id: 'inflight',
       agentId: agent.id,
@@ -206,24 +238,16 @@ describe('AgentService.execute', () => {
 
 describe('AgentService activity ordering', () => {
   it('is newest-first even when entries share a timestamp', async () => {
-    const fixed: ServiceDeps = {
-      id: (() => {
-        let n = 0;
-        return () => `id-${++n}`;
-      })(),
-      now: () => '2026-01-01T00:00:00.000Z',
-    };
-    const svc = new AgentService(
-      new InMemoryAgentRepository(),
-      new FakeAIProvider('success'),
-      fixed,
-    );
+    const svc = makeService('success');
     const ctx = ctxFor(user);
     const agent = await svc.create(ctx, { name: 'A', type: 'operations' });
     await svc.transition(ctx, agent.id, { to: 'active' });
     await svc.execute(ctx, agent.id, { input: 'go' });
-
-    const activity = await svc.activity(ctx, agent.id);
-    expect(activity.map((a) => a.type)).toEqual(['executed', 'status_changed', 'created']);
+    // created (t0), status_changed (t1), executed (t2) — deterministic deps.
+    expect((await svc.activity(ctx, agent.id)).map((a) => a.type)).toEqual([
+      'executed',
+      'status_changed',
+      'created',
+    ]);
   });
 });
