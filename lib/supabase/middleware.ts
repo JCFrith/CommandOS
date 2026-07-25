@@ -1,9 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
+/** Paths that require an authenticated operator. */
+const PROTECTED_PREFIXES = ['/console'];
+/** Paths an authenticated operator should be bounced away from. */
+const AUTH_PATHS = ['/login'];
+
 /**
- * Refresh the Supabase auth session on every matched request and forward the
- * updated cookies to both the browser and downstream server components.
+ * Refresh the Supabase auth session on every matched request, forward updated
+ * cookies, and enforce route protection. When Supabase is not configured the
+ * request passes through untouched so the app still runs locally.
  */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -11,7 +17,8 @@ export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Without configured Supabase credentials there is no session to refresh.
+  // Without configured Supabase credentials there is no session to refresh and
+  // no protection to enforce.
   if (!url || !anonKey) {
     return response;
   }
@@ -31,7 +38,35 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+  const isProtected = PROTECTED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+  const isAuthPath = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  // Build a redirect that carries over any auth cookies refreshed by getUser().
+  // A bare NextResponse.redirect would drop them, which can lose the session or
+  // trigger repeated token refreshes.
+  const redirectTo = (destination: string) => {
+    const url = request.nextUrl.clone();
+    url.pathname = destination;
+    url.search = '';
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  };
+
+  if (!user && isProtected) {
+    return redirectTo('/login');
+  }
+
+  if (user && isAuthPath) {
+    return redirectTo('/console');
+  }
 
   return response;
 }

@@ -41,3 +41,25 @@ export interface Operation {
   createdAt: string;
   updatedAt: string;
 }
+
+/** The authenticated operator, projected from the auth provider. */
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+/** A tenant boundary: the context an operator works within. */
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  role: WorkspaceRole;
+  kind: WorkspaceKind;
+}
+
+export type WorkspaceRole = 'owner' | 'admin' | 'member';
+
+/** `personal` workspaces are derived from a single user; `team` are shared. */
+export type WorkspaceKind = 'personal' | 'team';

@@ -1,0 +1,41 @@
+# Technical Debt
+
+A live ledger of known debt, deferrals, and intentional trade-offs. Each item is
+either **Open** (to be paid down), **Accepted** (a deliberate trade-off we're
+keeping), or **Resolved** (kept briefly for history, then pruned).
+
+`MASTER_BUILD.md` is authoritative on scope; this file records where we knowingly
+took on debt to keep milestones shippable.
+
+## Open
+
+| ID    | Area                | Item                                                                                                                                                              | Planned resolution                                                              |
+| ----- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| TD-01 | Tooling             | `next lint` prints a deprecation notice (removed in Next.js 16). Non-blocking.                                                                                    | Migrate to the ESLint CLI (`@next/codemod next-lint-to-eslint-cli`) as a chore. |
+| TD-02 | Dependencies        | `npm audit` reports transitive advisories from dev/build deps; no known runtime impact.                                                                           | Review and bump before the first production deploy.                             |
+| TD-03 | Testing             | Playwright e2e is configured (`home.spec.ts`) but not run in the CI cycle; auth flows have no e2e coverage.                                                       | Add auth e2e once a test Supabase project is wired; run e2e in CI.              |
+| TD-04 | Auth (verification) | Live auth is verified only via build + unit tests + render smoke. End-to-end sign-in/OAuth against a real Supabase project is untested here.                      | Manual + e2e pass against a configured Supabase project.                        |
+| TD-05 | Persistence         | `OperationsRepository` interface + `Operation` types are declared with no implementer.                                                                            | Supabase-backed implementation lands in Sprint 3.                               |
+| TD-06 | Workspaces          | Only the personal (derived) workspace exists; no Supabase `workspaces`/membership tables, so the switcher's "New workspace" is disabled and role/kind are static. | Introduce team workspaces + RLS; swap `PersonalWorkspaceRepository`.            |
+| TD-07 | Auth (UX)           | On redirect to `/login`, the originally requested path is dropped (`search` cleared), so deep links aren't restored after sign-in.                                | Thread a validated `next` param through login → callback.                       |
+| TD-08 | Commands            | Action commands (`New Operation`, `Dispatch an Agent`) navigate with an `intent` query param rather than performing the action.                                   | Wire real create/dispatch flows in Sprints 3–4.                                 |
+
+## Accepted (intentional trade-offs)
+
+| ID    | Area         | Trade-off                                                                                            | Rationale                                                                                                                                                        |
+| ----- | ------------ | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TD-A1 | Auth origin  | `origin()` falls back to the request `Host` header when `NEXT_PUBLIC_APP_URL` is unset.              | Supabase allow-lists redirect URLs server-side, so a spoofed Host can't redirect an OAuth flow off-platform. Set `NEXT_PUBLIC_APP_URL` in deployed environments. |
+| TD-A2 | Repositories | Repository indirection (`services/*`) adds boilerplate before a feature can persist.                 | Keeps feature code decoupled from Supabase and swappable (ADR 0002).                                                                                             |
+| TD-A3 | Env access   | `isSupabaseConfigured()` / `supabasePublicConfig()` read `process.env` directly inside `lib/env.ts`. | `lib/env.ts` is the designated env boundary; feature code goes through it.                                                                                       |
+| TD-A4 | Install      | Native install scripts (esbuild, sharp) emit npm allow-scripts warnings in this environment.         | Builds and tests succeed regardless; no action needed.                                                                                                           |
+
+## Resolved
+
+| ID    | Area          | Item                                                                                              | Resolution                                                                       |
+| ----- | ------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| TD-R1 | Supabase SSR  | Middleware redirect branches dropped auth cookies refreshed by `getUser()` (session-loss risk).   | Sprint 2 pre-merge — `redirectTo()` copies refreshed cookies onto redirects.     |
+| TD-R2 | Accessibility | Auth form: unlinked field errors, non-live status banner, OAuth buttons unlabeled while spinning. | Sprint 2 pre-merge — `aria-describedby` + ids, `role`/`aria-live`, `aria-label`. |
+| TD-R3 | Duplication   | `user → listForUser → workspaces[0]` duplicated in console layout + settings.                     | Sprint 2 pre-merge — extracted `getWorkspaceContext()` (+2 unit tests).          |
+| TD-R4 | Security      | Callback `next` guard allowed protocol-relative / backslash targets.                              | Sprint 2 pre-merge — guard rejects `//` and `/\` prefixes.                       |
+| TD-R5 | Dead code     | `hooks/use-mounted.ts` had zero importers.                                                        | Sprint 1 cleanup — removed.                                                      |
+| TD-R6 | Unused deps   | `react-hook-form` + `@hookform/resolvers` unused after Sprint 1.                                  | Sprint 2 — now power the auth form.                                              |

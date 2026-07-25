@@ -26,6 +26,41 @@ const clientSchema = z.object({
 export type ServerEnv = z.infer<typeof serverSchema>;
 export type ClientEnv = z.infer<typeof clientSchema>;
 
+/**
+ * Non-throwing check for whether Supabase credentials are present. Auth flows
+ * and route protection are gated on this so the app builds and runs locally
+ * without secrets configured.
+ */
+export function isSupabaseConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/**
+ * The configured public app URL, if present. Used to build absolute auth
+ * redirect URLs; callers fall back to the request host when it is absent
+ * (e.g. preview deploys). Read through here rather than touching `process.env`
+ * directly in feature code, per project conventions.
+ */
+export function configuredAppUrl(): string | undefined {
+  return process.env.NEXT_PUBLIC_APP_URL || undefined;
+}
+
+/**
+ * The two public Supabase values needed to construct auth clients. Intentionally
+ * narrower than {@link serverEnv} so auth does not depend on unrelated secrets
+ * (OpenAI, service role). Throws a clear error if Supabase is not configured.
+ */
+export function supabasePublicConfig(): { url: string; anonKey: string } {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error(
+      'Supabase is not configured (missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY).',
+    );
+  }
+  return { url, anonKey };
+}
+
 let cachedServerEnv: ServerEnv | null = null;
 let cachedClientEnv: ClientEnv | null = null;
 
