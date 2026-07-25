@@ -36,6 +36,28 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
+ * Non-throwing check for whether OpenAI credentials are present. AI execution is
+ * gated on this so the app builds and runs without an API key configured, and
+ * surfaces an honest "unavailable" state instead of fabricating output.
+ */
+export function isOpenAIConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+/**
+ * Centralized AI provider configuration — the single source of model selection.
+ * The model is NEVER taken from client input. Throws if OpenAI is not configured
+ * (callers gate on {@link isOpenAIConfigured} first).
+ */
+export function openAIConfig(): { apiKey: string; model: string } {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OpenAI is not configured (missing OPENAI_API_KEY).');
+  }
+  return { apiKey, model: process.env.OPENAI_MODEL || 'gpt-4o' };
+}
+
+/**
  * The configured public app URL, if present. Used to build absolute auth
  * redirect URLs; callers fall back to the request host when it is absent
  * (e.g. preview deploys). Read through here rather than touching `process.env`

@@ -1,4 +1,5 @@
-import type { AuthUser, Operation, Workspace, WorkspaceRole } from '@/types';
+import type { AuthUser, Operation, Workspace } from '@/types';
+import { roleAtLeast } from '@/lib/authz/roles';
 
 /**
  * Authorization rules for Operations.
@@ -9,18 +10,9 @@ import type { AuthUser, Operation, Workspace, WorkspaceRole } from '@/types';
  * only ever loads records for the caller's workspace); these predicates gate
  * *what* a member may do within a workspace they already belong to.
  *
- * Role hierarchy: owner ≥ admin ≥ member.
+ * The role hierarchy (owner ≥ admin ≥ member) lives in `@/lib/authz/roles`.
  */
-const ROLE_RANK: Record<WorkspaceRole, number> = {
-  member: 1,
-  admin: 2,
-  owner: 3,
-};
-
-/** Whether `role` is at least `min` in the hierarchy. */
-export function roleAtLeast(role: WorkspaceRole, min: WorkspaceRole): boolean {
-  return ROLE_RANK[role] >= ROLE_RANK[min];
-}
+export { roleAtLeast };
 
 /** Any member of the workspace may view its operations. */
 export function canViewOperations(workspace: Workspace): boolean {

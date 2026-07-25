@@ -1,13 +1,14 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 3 — Operations merge (`v0.3.0`)._
+_Last updated at the Sprint 4 — Agents & AI release (`v0.4.0`)._
 
 ## Current Sprint
 
-**Sprint 3 — Operations** ✅ complete — reviewed, merged to `main`, tagged
-`v0.3.0`.
-Sprint 2 — Auth & Workspaces ✅ (`v0.2.0`, `cef73ef`) · Sprint 1 — Command
-Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation ✅ (`f4809c0`).
+**Sprint 4 — Agents & AI** ✅ complete — reviewed, merged to `main`, tagged
+`v0.4.0`.
+Sprint 3 — Operations ✅ (`v0.3.0`, `31df2c7`) · Sprint 2 — Auth & Workspaces ✅
+(`v0.2.0`, `cef73ef`) · Sprint 1 — Command Surface & Shell ✅ (`fed69e6`) ·
+Sprint 0 — Foundation ✅ (`f4809c0`).
 
 ## Completed Features
 
@@ -66,27 +67,56 @@ Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation ✅ (`f4809c0`).
   RSC-first (only forms & transition controls are client components)
 - shadcn `textarea` primitive; **43 new unit/component tests**
 
+### Sprint 4 — Agents & AI
+
+- **Domain model**: workspace-scoped `Agent` (type, capabilities, instructions,
+  audit fields), management lifecycle state machine (`draft → active ⇄ paused`,
+  `→ disabled → active`, `→ archived`; only `active` runs), immutable
+  `AgentActivity` timeline, and `AgentExecution` with a structured, Zod-validated
+  result (D-401)
+- **AI provider boundary** (`lib/ai`): `AIProvider` interface + server-only
+  OpenAI adapter (centralized model selection, strict structured output, 30s
+  timeout, safe `AIProviderError`) + deterministic `FakeAIProvider` for tests.
+  Trusted per-type system prompts; operator content confined to the user message
+  (`prompt-builder`) — the prompt-injection boundary (D-402)
+- **Repository + service**: `AgentRepository` (dev in-memory, labelled) and
+  `AgentService` (validation, RBAC + ownership, lifecycle, workspace scoping,
+  synchronous execution with a duplicate-run guard, activity)
+- **Execution**: authorized operator runs an active agent → pending/running →
+  completed/failed; honest **unavailable** state when OpenAI isn't configured
+  (no fabricated success, D-403/D-404)
+- **Routes**: list, detail (run interface + run history + lifecycle + activity),
+  create, edit (`/console/agents`, `/[id]`, `/[id]/edit`, `/new`) + `/api/agents`
+- **Command palette**: create / find / open / run agents; **TD-13 resolved** —
+  operations + agents feeds keyed and requested by the active workspace (D-405)
+- Loading / empty / unavailable / error / success / not-found / permission-denied
+  states; accessible forms + keyboard nav; RSC-first (3 client components);
+  AI output rendered as text only
+- Shared `lib/authz/roles` + `services/workspace/context` (operations refactored
+  onto them); **55 new unit/component tests**
+
 ## Build Status
 
-| Gate                | Result                                                   |
-| ------------------- | -------------------------------------------------------- |
-| `npm run lint`      | ✅ No ESLint warnings or errors                          |
-| `npm run typecheck` | ✅ `tsc --noEmit` clean                                  |
-| `npm run build`     | ✅ compiled; 13 app routes (5 new operations routes/api) |
+| Gate                | Result                                               |
+| ------------------- | ---------------------------------------------------- |
+| `npm run lint`      | ✅ No ESLint warnings or errors                      |
+| `npm run typecheck` | ✅ `tsc --noEmit` clean                              |
+| `npm run build`     | ✅ compiled; 18 app routes (5 new agents routes/api) |
 
-Runtime smoke (unconfigured, prod server): `/`, `/login`, `/console`,
-`/console/settings`, `/console/operations` (empty state), `/console/operations/new`
-(form), `/api/operations` (`{"operations":[]}`) → 200; unknown operation id →
-not-found UI. The create Server Action executes end-to-end (validated → real UUID
-→ redirect). Cross-request read-back is not observable under the multi-worker test
-server (in-memory store limitation, below); the full create→transition→activity
-cycle is covered in-process by the service tests.
+Runtime smoke (unconfigured, prod server): agents list (empty state), create form
+(Type + Capabilities), `/api/agents` scoped JSON, unknown id → not-found → all 200. **TD-13**: `?workspaceId=<member>` scopes; `?workspaceId=<foreign>` → empty
+(no leak). Create-agent Server Action → 303 → real UUID; empty name → validation
+error. The full run workflow (create → activate → run success/failed → unavailable
+→ history → activity → cross-workspace → permission denial) is verified in a
+single realm via an in-process walkthrough driving the real `AgentService` +
+`FakeAIProvider` — cross-request read-back is not observable under the multi-worker
+server (TD-09).
 
 ## Test Status
 
 | Suite            | Result                                                     |
 | ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 60 passing across 12 files (44 new for Operations)      |
+| Unit (Vitest)    | ✅ 114 passing across 21 files (55 new for Agents & AI)    |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 ## Technical Debt Audit (post-Sprint 1)
@@ -184,11 +214,39 @@ boundary. (pre-merge) added cross-workspace write-isolation tests (60 tests tota
 - Unknown operation ids render the not-found UI but return HTTP 200 (nested
   `notFound()` under the streaming `force-dynamic` console layout) — TD-10.
 
+## Sprint 4 Review & Known Limitations
+
+Reviewed every Sprint 4 change for architecture, security, accessibility, and
+code quality. **Verified:** no UI imports the repository or OpenAI (model calls
+are server-only, behind `AIProvider`); no client-controlled model/system-prompt/
+tools; operator content never enters the system role; structured output is
+Zod-validated; AI content rendered as text only; errors carry no secrets/prompts/
+stack traces; cross-workspace reads and writes blocked; execution gated on
+active-status + authz with a duplicate-run guard; no secret/prompt logging; 3
+justified client components. **Fixes applied during review:** removed an unused
+import; corrected a test type (`FakeMode`); updated a Sprint-1 command test for
+the retired `agent.dispatch`.
+
+**Known limitations (see `DECISIONS.md` / `TECH_DEBT.md`):**
+
+- **Persistence deferral (approved, D-302).** Agents/executions run on the dev
+  in-memory store (TD-14); the Supabase adapter implements the existing interface
+  later. Single-worker only under `next start` (TD-09) — stateful run workflows
+  are validated deterministically in one process.
+- **No fabricated AI output.** With OpenAI unconfigured, execution returns an
+  honest `unavailable` state; live model calls are untested here (no key). The
+  deterministic `FakeAIProvider` is test/dev-only.
+- **No global AI rate limiting** yet (only a per-agent duplicate-run guard) — TD-15.
+- **Synchronous execution only**; `cancelled` is reserved for a future async
+  workflow (TD-16). No autonomous background runs (D-404).
+- Unknown agent id renders the not-found UI but returns HTTP 200 (same nested
+  `notFound()` behavior as operations — TD-10).
+
 ## Next Sprint
 
-**Sprint 4 — Agents & AI** (not started)
+**Sprint 5 — Signals & Observability** (not started)
 
-- Agent runtime abstraction; OpenAI-backed NL → command parsing
-- Streaming agent responses; tool-call scaffolding
+- Telemetry/signals surface; Supabase realtime subscriptions
 
-> Sprint 4 has **not** been started.
+> Sprint 4 is complete on its branch but **not merged, not tagged**. Sprint 5 has
+> **not** been started.

@@ -126,6 +126,70 @@ workspace only when Supabase is not configured, so Operations is usable via
 `next dev` without secrets — mirroring how Sprint 2 keeps the console reachable.
 Never used when auth is configured.
 
+## Sprint 4 — Agents & AI (2026-07-25)
+
+### D-401 · Agent management lifecycle (a documented judgment call)
+
+`33_STATE_MACHINE_SPECIFICATION.md` defines an execution ("AI Workflow") state
+machine but no _management_ lifecycle for an agent definition. The sprint
+directive requires enable / disable / pause / resume / archive, so we define one
+(`lib/agents/state-machine.ts`): `draft → active ⇄ paused`, `active/paused →
+disabled → active`, any non-archived `→ archived` (terminal). Only `active`
+agents may execute. This follows the "fail safely / under user control"
+principles of `50_AI_AGENT_FRAMEWORK.md`; it is additive, not a contradiction of
+spec 33 (which governs execution, modelled separately as `AgentExecutionStatus`).
+
+### D-402 · AI behind a provider interface; strict trust boundaries
+
+Per `04_API_SPECIFICATION.md` ("UI → Service → Adapter → Provider", "never call
+model providers from UI", "no raw provider responses reach UI") the model is
+reached only through `AIProvider` (`lib/ai`). Concretely:
+
+- **Model selection is centralized** in `openAIConfig()` — never client input.
+- **System prompts are trusted**, one per agent type (`lib/agents/prompts.ts`).
+  Operator content (an agent's `instructions`, an execution's `input`) is placed
+  in the _user_ message under explicit "data, not instructions" delimiters
+  (`lib/ai/prompt-builder.ts`) — the prompt-injection boundary.
+- **Structured output** is requested with a strict JSON schema and re-validated
+  with Zod; a non-conforming payload becomes an `invalid_output` failure, never a
+  crash or unsafe render.
+- **Errors are safe**: `AIProviderError` carries user-facing messages + an error
+  catalog code (`CMD-AI-###`); no secrets, prompts, stack traces, or provider
+  internals leak. Executions store audit metadata (model, prompt version,
+  duration) but never the key or system prompt.
+
+### D-403 · No fabricated success; honest "unavailable" state
+
+There is no silent fake-provider fallback in production. When OpenAI is not
+configured, `execute` raises `unavailable` and the runner shows an honest notice
+— it never invents output. The deterministic `FakeAIProvider` is test/dev-only
+and never wired into the production factory.
+
+### D-404 · Synchronous execution only; no autonomous background runs
+
+Sprint 4 implements the smallest complete execution workflow: an authorized
+operator runs an active agent synchronously (pending → running →
+completed/failed). No autonomous/background execution (the specs don't require
+it here). A duplicate-submission guard (`hasActiveExecution`) plus the client's
+disabled-while-pending button prevent replay. `cancelled` exists in the type for
+a future async workflow but is unreachable today (documented in TECH_DEBT).
+
+### D-405 · TD-13 resolved — workspace-scoped command palette
+
+Palette queries are keyed by the active workspace id (`lib/commands/palette.ts`),
+so a workspace switch uses a distinct cache entry and never shows a previous
+workspace's results. The id is sourced from a small `store/workspace.ts` (the
+selection is ephemeral UI state) which the `WorkspaceProvider` mirrors, so the
+root-mounted palette — which sits above the provider — can read it. Requests
+carry the id; the server honors it only for a workspace the caller belongs to
+(`resolveWorkspace`), so a foreign id can never read another workspace's data.
+
+### D-406 · Shared workspace context + role helper (dedup)
+
+`getWorkspaceContext` (`services/workspace/context.ts`) and `roleAtLeast`
+(`lib/authz/roles.ts`) are now shared by operations and agents, so workspace
+resolution and RBAC are defined once (operations was refactored onto them).
+
 ## How to use this log
 
 - Add a dated, numbered entry (`D-2xx`) when a non-obvious choice is made.

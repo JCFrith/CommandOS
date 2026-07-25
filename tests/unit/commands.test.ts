@@ -4,7 +4,9 @@ import { COMMANDS, commandGroups } from '@/lib/commands/registry';
 describe('command registry', () => {
   it('exposes only non-empty groups in canonical order', () => {
     const groups = commandGroups();
-    expect(groups.map((g) => g.group)).toEqual(['navigate', 'create', 'agent']);
+    // The 'agent' group is empty since Sprint 4 retired the `agent.dispatch`
+    // placeholder in favour of real agents (create.agent lives in 'create').
+    expect(groups.map((g) => g.group)).toEqual(['navigate', 'create']);
     for (const section of groups) {
       expect(section.commands.length).toBeGreaterThan(0);
     }
