@@ -1,11 +1,13 @@
 # PROJECT_STATUS
 
-_Last updated after Sprint 2._
+_Last updated at the Sprint 3 — Operations merge (`v0.3.0`)._
 
 ## Current Sprint
 
-**Sprint 2 — Auth & Workspaces** ✅ complete (branch `sprint-2-auth-workspaces`).
-Sprint 1 — Command Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation ✅ (`f4809c0`).
+**Sprint 3 — Operations** ✅ complete — reviewed, merged to `main`, tagged
+`v0.3.0`.
+Sprint 2 — Auth & Workspaces ✅ (`v0.2.0`, `cef73ef`) · Sprint 1 — Command
+Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation ✅ (`f4809c0`).
 
 ## Completed Features
 
@@ -44,22 +46,47 @@ Sprint 1 — Command Surface & Shell ✅ (`fed69e6`) · Sprint 0 — Foundation 
 - Decoupled the Supabase server client from unrelated secrets (`supabasePublicConfig`)
 - Console routes `force-dynamic`; unit tests for auth schema + workspace repo
 
+### Sprint 3 — Operations
+
+- **Domain model**: workspace-scoped `Operation` (title, description, priority,
+  status, audit fields) + immutable `OperationActivity` timeline (`types/index.ts`)
+- **Lifecycle state machine** (`lib/operations/state-machine.ts`) transcribed
+  from `33_STATE_MACHINE_SPECIFICATION.md`: `draft → planned → in_progress ⇄ blocked`,
+  `in_progress → completed → archived`; invalid transitions rejected
+- **Repository boundary** (`OperationsRepository`) with a labelled dev-only
+  **in-memory implementation**; Supabase adapter deferred (see roadmap deviation)
+- **Service layer** (`operations-service.ts`): use cases with Zod validation,
+  RBAC + ownership permissions, lifecycle enforcement, and activity recording
+- **Server Actions** (create / update / transition) with revalidation + redirects
+- **Routes**: list, detail (+ timeline + lifecycle controls), create, edit
+  (`/console/operations`, `/[id]`, `/[id]/edit`, `/new`) + palette feed API
+- **Command palette**: create, find, and open operations from ⌘K (live feed via
+  TanStack Query → `/api/operations`)
+- Loading / empty / error / success states; accessible forms + keyboard nav;
+  RSC-first (only forms & transition controls are client components)
+- shadcn `textarea` primitive; **43 new unit/component tests**
+
 ## Build Status
 
-| Gate                | Result                              |
-| ------------------- | ----------------------------------- |
-| `npm run lint`      | ✅ No ESLint warnings or errors     |
-| `npm run typecheck` | ✅ `tsc --noEmit` clean             |
-| `npm run build`     | ✅ 11 pages generated, 8 app routes |
+| Gate                | Result                                                   |
+| ------------------- | -------------------------------------------------------- |
+| `npm run lint`      | ✅ No ESLint warnings or errors                          |
+| `npm run typecheck` | ✅ `tsc --noEmit` clean                                  |
+| `npm run build`     | ✅ compiled; 13 app routes (5 new operations routes/api) |
 
 Runtime smoke (unconfigured, prod server): `/`, `/login`, `/console`,
-`/console/settings` → 200; `/auth/callback` → 307 → `/login?error=auth`.
+`/console/settings`, `/console/operations` (empty state), `/console/operations/new`
+(form), `/api/operations` (`{"operations":[]}`) → 200; unknown operation id →
+not-found UI. The create Server Action executes end-to-end (validated → real UUID
+→ redirect). Cross-request read-back is not observable under the multi-worker test
+server (in-memory store limitation, below); the full create→transition→activity
+cycle is covered in-process by the service tests.
 
 ## Test Status
 
 | Suite            | Result                                                     |
 | ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 16 passing across 5 files                               |
+| Unit (Vitest)    | ✅ 60 passing across 12 files (44 new for Operations)      |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 ## Technical Debt Audit (post-Sprint 1)
@@ -113,12 +140,55 @@ reviewed as correct.
 > post-review tree. Runtime smoke against a live Supabase project is deferred to
 > a configured environment (unconfigured local dev bypasses auth by design).
 
+## Sprint 3 Review & Known Limitations
+
+Reviewed at the initial Sprint 3 commit and again at the **pre-merge review**
+(2026-07-25) across every requested dimension (lifecycle correctness, workspace
+isolation, permission enforcement, boundary integrity, coupling to the in-memory
+impl, security, validation/error handling, a11y + keyboard nav, RSC boundaries,
+unnecessary client components, hydration, duplication, dead code, premature
+abstraction, test quality, convention consistency).
+
+**Pre-merge verification (all pass):**
+
+1. No UI component imports/instantiates the in-memory repository — it is
+   referenced only by `operations-service.ts` (default binding) and the tests.
+2. Domain/service tests are UI-free (only `operation-form.test.tsx` uses RTL).
+3. Workspace-scoped reads **and writes** cannot cross boundaries — every repo
+   call is scoped by `ctx.workspace.id`; writes derive from a workspace-scoped
+   `get` (cross-workspace update/transition/activity → `not_found`, now tested).
+4. Invalid transitions are rejected in the service (`canTransition` guard) and
+   the UI only offers server-computed legal moves.
+5. Dev-only persistence is labelled in code (`DEVELOPMENT-ONLY`) and docs.
+6. The Supabase adapter can implement the existing interface unchanged
+   (domain-types-in/out; identity/timestamps/authz live in the service).
+7. Palette actions are workspace + permission scoped via `/api/operations`
+   (`service.list` → `canViewOperations`); open/create re-authorize server-side.
+8. Loading / empty / error / success / permission-denied / not-signed-in states
+   are represented honestly.
+
+**Cleanups applied:** (initial commit) removed unused permission aliases and
+`OperationsService.nextStatuses`, dropped a redundant console log in the error
+boundary. (pre-merge) added cross-workspace write-isolation tests (60 tests total).
+
+**Known limitations (see `DECISIONS.md` / `TECH_DEBT.md`):**
+
+- **Persistence deferral — APPROVED.** Operations run on the in-memory dev
+  repository until the planned Supabase persistence sprint (D-302, TD-05). The
+  repository/service interfaces are the stable contract for that adapter.
+- **In-memory store is single-worker.** A write on one worker isn't visible to a
+  read on another (`next start` / serverless run multiple workers). Fine for
+  single-process `next dev`; the Supabase adapter is the multi-worker/production path.
+- **Lifecycle from spec, verbatim.** Six states, six transitions — no cancel path,
+  because the state-machine spec lists none. Archived operations are read-only.
+- Unknown operation ids render the not-found UI but return HTTP 200 (nested
+  `notFound()` under the streaming `force-dynamic` console layout) — TD-10.
+
 ## Next Sprint
 
-**Sprint 3 — Operations** (not started; awaiting approval)
+**Sprint 4 — Agents & AI** (not started)
 
-- `Operation` schema (Supabase migration) + `OperationsRepository` implementation
-- Server Actions (create/list) with Zod validation
-- Live operations feed with optimistic updates
+- Agent runtime abstraction; OpenAI-backed NL → command parsing
+- Streaming agent responses; tool-call scaffolding
 
-> Sprint 3 has **not** been started. Awaiting approval.
+> Sprint 4 has **not** been started.

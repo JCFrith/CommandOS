@@ -30,16 +30,62 @@ export const COMMAND_GROUP_LABELS: Record<CommandGroup, string> = {
   system: 'System',
 };
 
-/** Status of an autonomous or user-triggered operation. */
-export type OperationStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed';
+/**
+ * Lifecycle state of an Operation. The set and its legal transitions are the
+ * "Task" state machine from `33_STATE_MACHINE_SPECIFICATION.md` — the canonical
+ * lifecycle for a unit of work. See `lib/operations/state-machine.ts`.
+ */
+export type OperationStatus =
+  'draft' | 'planned' | 'in_progress' | 'blocked' | 'completed' | 'archived';
 
-/** A unit of work executed by the platform, human- or agent-initiated. */
+/** Relative importance of an Operation (indexed per `03_DATABASE_SCHEMA.md`). */
+export type OperationPriority = 'low' | 'medium' | 'high';
+
+/**
+ * A unit of work — human- or agent-initiated — tracked from intent to outcome.
+ * Scoped to a {@link Workspace} (the tenant boundary; `organization_id` in the
+ * schema) and carrying the audit fields the schema mandates (`created_by` /
+ * `updated_by`, timestamps).
+ */
 export interface Operation {
   id: string;
+  workspaceId: string;
   title: string;
+  description: string | null;
   status: OperationStatus;
+  priority: OperationPriority;
+  /** User id of the operator who created the record. */
+  createdBy: string;
+  /** User id of the operator who last modified the record. */
+  updatedBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** The kinds of audit events an Operation records on its activity timeline. */
+export type OperationActivityType = 'created' | 'updated' | 'status_changed';
+
+/**
+ * An immutable, timestamped entry on an Operation's activity timeline. Every
+ * create / update / transition appends one (per the audit-logging rules in
+ * `03_DATABASE_SCHEMA.md` and the event model in `32_EVENT_DRIVEN_ARCHITECTURE.md`).
+ */
+export interface OperationActivity {
+  id: string;
+  operationId: string;
+  workspaceId: string;
+  /** User id of the actor who caused the event. */
+  actorId: string;
+  /** Display-name snapshot of the actor at event time. */
+  actorName: string;
+  type: OperationActivityType;
+  /** Human-readable summary, e.g. "moved from Planned to In Progress". */
+  message: string;
+  /** Previous status, for `status_changed` events. */
+  fromStatus: OperationStatus | null;
+  /** New status, for `status_changed` events. */
+  toStatus: OperationStatus | null;
+  createdAt: string;
 }
 
 /** The authenticated operator, projected from the auth provider. */

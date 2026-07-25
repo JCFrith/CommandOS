@@ -9,7 +9,42 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet — Sprint 3 (Operations) has not started._
+_Nothing yet — Sprint 4 (Agents & AI) has not started._
+
+## [0.3.0] — 2026-07-25
+
+Sprint 3 — **Operations**. The complete Operations vertical slice on a
+development in-memory store, behind the repository/service boundaries. Persistence
+remains in-memory until the planned Supabase persistence sprint (deferral approved
+at the pre-merge review).
+
+### Added
+
+- Workspace-scoped `Operation` domain model (title, description, priority,
+  lifecycle status, audit fields) and an immutable `OperationActivity` timeline.
+- Lifecycle state machine transcribed from `33_STATE_MACHINE_SPECIFICATION.md`:
+  `draft → planned → in_progress ⇄ blocked`, `in_progress → completed → archived`.
+  Invalid transitions are rejected; every transition is recorded as activity.
+- `OperationsRepository` interface with a labelled **development-only in-memory
+  implementation** (the Supabase adapter is deferred with the operations migration).
+- Operations service layer: use cases with Zod validation, RBAC + ownership
+  permissions, lifecycle enforcement, and workspace scoping.
+- Server Actions for create, edit, and status transition (revalidation +
+  redirects); all authorization and validation enforced server-side.
+- Operations surfaces: list (with empty state), detail (with activity timeline
+  and lifecycle controls), create, and edit — plus loading and error boundaries.
+- ⌘K command-palette actions to create, find, and open operations (live feed via
+  TanStack Query against a new workspace-scoped `/api/operations` route).
+- shadcn `textarea` primitive.
+- 44 unit/component tests (state machine, permissions, schema, repository,
+  service workflows incl. cross-workspace isolation, command registration, and
+  the operation form).
+
+### Changed
+
+- The `Operation` type and `OperationsRepository` interface were replaced (the
+  Sprint-0 `{id,title,status}` scaffold → the full workspace-scoped model).
+- The `create.operation` palette action now opens `/console/operations/new`.
 
 ## [0.2.0] — 2026-07-24
 
@@ -85,5 +120,6 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/jcfrith/CommandOS/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/jcfrith/CommandOS/releases/tag/v0.2.0
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0
+[0.2.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.2.0
