@@ -36,3 +36,15 @@ export class PersonalWorkspaceRepository implements WorkspaceRepository {
 
 /** The active workspace repository. Swap here when team workspaces arrive. */
 export const workspaceRepository: WorkspaceRepository = new PersonalWorkspaceRepository();
+
+/**
+ * Resolve the workspaces available to a (possibly signed-out) operator and the
+ * current one. Shared by the console shell and settings so the "first workspace
+ * is current" rule lives in a single place.
+ */
+export async function getWorkspaceContext(
+  user: AuthUser | null,
+): Promise<{ workspaces: Workspace[]; current: Workspace | null }> {
+  const workspaces = user ? await workspaceRepository.listForUser(user) : [];
+  return { workspaces, current: workspaces[0] ?? null };
+}

@@ -36,6 +36,16 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
+ * The configured public app URL, if present. Used to build absolute auth
+ * redirect URLs; callers fall back to the request host when it is absent
+ * (e.g. preview deploys). Read through here rather than touching `process.env`
+ * directly in feature code, per project conventions.
+ */
+export function configuredAppUrl(): string | undefined {
+  return process.env.NEXT_PUBLIC_APP_URL || undefined;
+}
+
+/**
  * The two public Supabase values needed to construct auth clients. Intentionally
  * narrower than {@link serverEnv} so auth does not depend on unrelated secrets
  * (OpenAI, service role). Throws a clear error if Supabase is not configured.

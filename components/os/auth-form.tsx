@@ -64,6 +64,7 @@ export function AuthForm({ notice }: { notice?: string }) {
             type="button"
             variant="outline"
             disabled={busy}
+            aria-label={`Continue with ${provider}`}
             onClick={() => startOAuth(provider)}
           >
             {oauthPending === provider ? (
@@ -90,10 +91,13 @@ export function AuthForm({ notice }: { notice?: string }) {
             autoComplete="email"
             placeholder="operator@commandos.app"
             aria-invalid={!!form.formState.errors.email}
+            aria-describedby={form.formState.errors.email ? 'email-error' : undefined}
             {...form.register('email')}
           />
           {form.formState.errors.email && (
-            <p className="text-destructive text-xs">{form.formState.errors.email.message}</p>
+            <p id="email-error" className="text-destructive text-xs">
+              {form.formState.errors.email.message}
+            </p>
           )}
         </div>
 
@@ -105,15 +109,20 @@ export function AuthForm({ notice }: { notice?: string }) {
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             placeholder="••••••••"
             aria-invalid={!!form.formState.errors.password}
+            aria-describedby={form.formState.errors.password ? 'password-error' : undefined}
             {...form.register('password')}
           />
           {form.formState.errors.password && (
-            <p className="text-destructive text-xs">{form.formState.errors.password.message}</p>
+            <p id="password-error" className="text-destructive text-xs">
+              {form.formState.errors.password.message}
+            </p>
           )}
         </div>
 
         {(serverError || notice) && (
           <p
+            role={serverError ? 'alert' : 'status'}
+            aria-live={serverError ? 'assertive' : 'polite'}
             className={cn(
               'rounded-lg border px-3 py-2 text-xs',
               serverError

@@ -5,7 +5,7 @@ import { headers } from 'next/headers';
 import type { Route } from 'next';
 
 import { createClient } from '@/lib/supabase/server';
-import { isSupabaseConfigured } from '@/lib/env';
+import { configuredAppUrl, isSupabaseConfigured } from '@/lib/env';
 import { credentialsSchema, OAUTH_PROVIDERS, type OAuthProvider } from '@/lib/auth/schema';
 
 export interface AuthActionState {
@@ -25,7 +25,7 @@ function readCredentials(formData: FormData) {
 
 /** Resolve the app origin for building auth redirect URLs. */
 async function origin(): Promise<string> {
-  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  const configured = configuredAppUrl();
   if (configured) return configured;
   const host = (await headers()).get('host') ?? 'localhost:3000';
   const protocol = host.startsWith('localhost') ? 'http' : 'https';

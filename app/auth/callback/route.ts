@@ -11,8 +11,15 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get('code');
   const nextParam = searchParams.get('next');
-  // Only allow relative, single-segment-safe redirects to avoid open redirects.
-  const next = nextParam && nextParam.startsWith('/') ? nextParam : '/console';
+  // Only allow same-origin relative redirects to avoid open redirects. Reject
+  // protocol-relative (`//host`) and backslash (`/\host`) forms that browsers
+  // can resolve to a different origin.
+  const isSafeNext =
+    !!nextParam &&
+    nextParam.startsWith('/') &&
+    !nextParam.startsWith('//') &&
+    !nextParam.startsWith('/\\');
+  const next = isSafeNext ? nextParam : '/console';
 
   if (code && isSupabaseConfigured()) {
     const supabase = await createClient();

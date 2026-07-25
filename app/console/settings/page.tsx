@@ -5,14 +5,13 @@ import { SectionShell } from '@/components/os/section-shell';
 import { SignOutButton } from '@/components/os/sign-out-button';
 import { getCurrentUser } from '@/lib/auth/session';
 import { isSupabaseConfigured } from '@/lib/env';
-import { workspaceRepository } from '@/services/workspaces/personal-workspace-repository';
+import { getWorkspaceContext } from '@/services/workspaces/personal-workspace-repository';
 
 export const metadata: Metadata = { title: 'Settings' };
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  const workspaces = user ? await workspaceRepository.listForUser(user) : [];
-  const workspace = workspaces[0] ?? null;
+  const { current: workspace } = await getWorkspaceContext(user);
 
   return (
     <SectionShell

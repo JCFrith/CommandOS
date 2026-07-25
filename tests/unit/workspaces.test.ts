@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getWorkspaceContext,
   PersonalWorkspaceRepository,
   personalWorkspaceId,
 } from '@/services/workspaces/personal-workspace-repository';
@@ -29,5 +30,19 @@ describe('PersonalWorkspaceRepository', () => {
   it('resolves the workspace by its derived id and rejects others', async () => {
     expect(await repo.getForUser(user, personalWorkspaceId(user.id))).not.toBeNull();
     expect(await repo.getForUser(user, 'personal-other')).toBeNull();
+  });
+});
+
+describe('getWorkspaceContext', () => {
+  it('returns the personal workspace as current for a signed-in user', async () => {
+    const { workspaces, current } = await getWorkspaceContext(user);
+    expect(workspaces).toHaveLength(1);
+    expect(current?.id).toBe(personalWorkspaceId(user.id));
+  });
+
+  it('returns an empty context for a signed-out operator', async () => {
+    const { workspaces, current } = await getWorkspaceContext(null);
+    expect(workspaces).toEqual([]);
+    expect(current).toBeNull();
   });
 });

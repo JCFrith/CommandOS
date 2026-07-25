@@ -48,18 +48,24 @@ export async function updateSession(request: NextRequest) {
   );
   const isAuthPath = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
+  // Build a redirect that carries over any auth cookies refreshed by getUser().
+  // A bare NextResponse.redirect would drop them, which can lose the session or
+  // trigger repeated token refreshes.
+  const redirectTo = (destination: string) => {
+    const url = request.nextUrl.clone();
+    url.pathname = destination;
+    url.search = '';
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  };
+
   if (!user && isProtected) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = '/login';
-    redirectUrl.search = '';
-    return NextResponse.redirect(redirectUrl);
+    return redirectTo('/login');
   }
 
   if (user && isAuthPath) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = '/console';
-    redirectUrl.search = '';
-    return NextResponse.redirect(redirectUrl);
+    return redirectTo('/console');
   }
 
   return response;
