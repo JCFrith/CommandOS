@@ -109,3 +109,97 @@ export type WorkspaceRole = 'owner' | 'admin' | 'member';
 
 /** `personal` workspaces are derived from a single user; `team` are shared. */
 export type WorkspaceKind = 'personal' | 'team';
+
+// --- Agents (Sprint 4) ------------------------------------------------------
+
+/** The specialised agent roles from `50_AI_AGENT_FRAMEWORK.md`. */
+export type AgentType = 'executive' | 'operations' | 'communications' | 'flight' | 'property';
+
+/**
+ * Management lifecycle status of an agent definition (distinct from an
+ * execution's status). `active` is the only status eligible to run.
+ * See `lib/agents/state-machine.ts`.
+ */
+export type AgentStatus = 'draft' | 'active' | 'paused' | 'disabled' | 'archived';
+
+/** A capability an agent is permitted to exercise (fixed, server-defined set). */
+export type AgentCapability = 'summarize' | 'prioritize' | 'draft' | 'analyze' | 'recommend';
+
+/**
+ * An agent DEFINITION — a configured, workspace-owned AI collaborator. This is
+ * the trusted configuration; operator-provided free text (`instructions`) is
+ * carried as context, never as system instructions (see `lib/ai`).
+ */
+export interface Agent {
+  id: string;
+  workspaceId: string;
+  name: string;
+  type: AgentType;
+  description: string | null;
+  /** Operator-provided guidance — treated as untrusted context at execution. */
+  instructions: string | null;
+  capabilities: AgentCapability[];
+  status: AgentStatus;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Kinds of audit events on an agent's activity timeline. */
+export type AgentActivityType = 'created' | 'updated' | 'status_changed' | 'executed';
+
+/** An immutable, chronological audit entry for an agent. */
+export interface AgentActivity {
+  id: string;
+  agentId: string;
+  workspaceId: string;
+  actorId: string;
+  actorName: string;
+  type: AgentActivityType;
+  message: string;
+  fromStatus: AgentStatus | null;
+  toStatus: AgentStatus | null;
+  createdAt: string;
+}
+
+/** Lifecycle status of a single execution (the "AI Workflow" of spec 33). */
+export type AgentExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+/** Confidence band the model reports with a result (per `06_AI_BEHAVIOR.md`). */
+export type AIConfidence = 'high' | 'medium' | 'low';
+
+/**
+ * The structured, validated output of an agent execution. Deterministic shape —
+ * enforced by the provider's structured-output mode and re-validated with Zod.
+ */
+export interface AgentExecutionResult {
+  summary: string;
+  keyPoints: string[];
+  risks: string[];
+  recommendations: string[];
+  confidence: AIConfidence;
+}
+
+/**
+ * A record of one agent run: the operator's request, the result (or a safe
+ * error), and audit-appropriate model metadata (never secrets or raw prompts).
+ */
+export interface AgentExecution {
+  id: string;
+  agentId: string;
+  workspaceId: string;
+  requestedBy: string;
+  status: AgentExecutionStatus;
+  /** Operator-provided input (their content). */
+  input: string;
+  result: AgentExecutionResult | null;
+  /** Safe, user-facing error message — never provider internals or secrets. */
+  error: string | null;
+  /** Audit metadata: model + prompt version + timing; no secrets, no key. */
+  model: string | null;
+  promptVersion: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  completedAt: string | null;
+}

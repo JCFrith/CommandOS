@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 
-import type { AuthUser, Operation, OperationActivity, Workspace } from '@/types';
+import type { Operation, OperationActivity } from '@/types';
+import type { WorkspaceContext } from '@/services/workspace/context';
 import {
   createOperationSchema,
   transitionOperationSchema,
@@ -21,10 +22,7 @@ import type { OperationsRepository } from './operations-repository';
 import { operationsRepository } from './in-memory-operations-repository';
 
 /** The resolved caller: who is acting and in which workspace. */
-export interface OperationsContext {
-  user: AuthUser;
-  workspace: Workspace;
-}
+export type OperationsContext = WorkspaceContext;
 
 /** Failure codes the service raises; the action layer maps these to UI states. */
 export type OperationErrorCode =

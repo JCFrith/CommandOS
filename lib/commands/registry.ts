@@ -1,4 +1,4 @@
-import { Activity, Bot, LayoutDashboard, Plus, Radio, Settings, Sparkles } from 'lucide-react';
+import { Activity, Bot, LayoutDashboard, Plus, Radio, Settings } from 'lucide-react';
 
 import type { Command, CommandGroup } from '@/types';
 import { COMMAND_GROUP_LABELS } from '@/types';
@@ -64,17 +64,17 @@ export const COMMANDS: readonly Command[] = [
     shortcut: ['⌘', 'N'],
   },
   {
-    id: 'agent.dispatch',
-    label: 'Dispatch an Agent',
-    description: 'Delegate work to an autonomous operator',
-    group: 'agent',
-    icon: Sparkles,
-    keywords: ['run', 'delegate', 'ai'],
+    id: 'create.agent',
+    label: 'New Agent',
+    description: 'Configure an AI collaborator',
+    group: 'create',
+    icon: Bot,
+    keywords: ['add', 'ai', 'assistant', 'create'],
   },
 ] as const;
 
 /** Command ids that trigger an action rather than navigation. */
-export type ActionCommandId = 'create.operation' | 'agent.dispatch';
+export type ActionCommandId = 'create.operation' | 'create.agent';
 
 /** Ordered list of the groups that actually contain commands. */
 export function commandGroups(): { group: CommandGroup; label: string; commands: Command[] }[] {
