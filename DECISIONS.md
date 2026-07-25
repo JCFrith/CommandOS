@@ -261,6 +261,72 @@ Confirmed by the product owner at the two-phase release:
   implementation is added in this release; **TD-19 and TD-20 stay open** (and
   accurately documented), alongside TD-18 (dev-only execution logging).
 
+## Sprint 5 — Signals & Observability Platform (2026-07-25)
+
+Platform sprint: build the platform-wide event + observability system that every
+subsystem emits into. Full design in `docs/signals.md`, `docs/signal-bus.md`,
+`docs/observability.md`, `docs/timeline-engine.md`.
+
+### D-501 · Signals are emitted additively; existing behavior is preserved
+
+Emission is best-effort and **never** changes a use case's result (a bus failure
+can't break an operation, agent run, or transition). The Sprint 3/4
+`OperationActivity`/`AgentActivity` timelines and the `ExecutionLogger` are left
+exactly as they are — Signals are a parallel, canonical event stream, not a
+replacement. This honors "current functionality must continue exactly as today"
+while establishing the platform. Feature services get an injected
+`SignalPublisher` that defaults to a no-op, so existing tests and behavior are
+unchanged unless the real bus is wired.
+
+### D-502 · Signals are append-only; lifecycle is a projection
+
+An emitted `Signal` is immutable. Acknowledgement/resolution is recorded as
+appended `SignalEvent`s and folded into the current `status`/`resolution` at read
+time (`projectLifecycle`) — the historical record is never mutated. The
+`SignalEventStore` exposes only appends; the durable adapter implements the same
+interface.
+
+### D-503 · Architecture — services publish, the bus distributes, the store persists
+
+Per `04_API_SPECIFICATION.md`: `UI → Feature Services → SignalBus →
+Repositories → Persistence`. **No UI component and no repository publishes
+directly.** Emitters depend only on the narrow `SignalPublisher` seam, never on
+subscribers ("nothing depends on downstream consumers"). A built-in persistence
+subscriber appends to the append-only store; future consumers (notifications,
+monitoring) subscribe without any upstream change. The in-process bus is shaped
+so a distributed transport implements the same interface without a redesign.
+
+### D-504 · Correlation is minted at the chain head and preserved automatically
+
+The agent service mints one correlation id per run and threads it into
+`ExecutionContext.correlationId`; the runtime tags every execution Signal with
+it. So an entire chain — agent run → runtime → provider → retry → completion —
+shares one id, reconstructable by the timeline/correlation views without
+per-feature plumbing.
+
+### D-505 · Metrics & health are computed from Signals; never fabricated
+
+Observability derives from the event stream (a single source of truth), not a
+parallel pipeline. Estimated token/cost figures stay labelled `estimated`; rates
+are `null` (not `0`) with no data; provider/runtime availability is read from
+configuration (`isOpenAIConfigured`), so an unconfigured environment shows an
+honest `unavailable`, never invented activity.
+
+### D-506 · Notification framework is interface-only
+
+`NotificationChannel`/`Message`/`Dispatcher`/`Subscription`/`Rule` are contracts
+only — no delivery and no channel implementations this sprint. They are shaped so
+Email/Slack/SMS/Teams/Webhook/Push drop in behind them later, consuming the
+subscription engine, without changing the Signal platform (TD-22).
+
+### D-507 · Auth-failure signals are `system`-scoped and PII-free
+
+Every Signal is workspace-scoped. A successful sign-in is scoped to the
+operator's personal workspace; a FAILED sign-in has no trusted operator, so it is
+scoped to a reserved `system` workspace (never surfaced in a tenant view) and
+carries only the method — no email, no credentials. Auth signals fire only when
+auth is actually configured and exercised; nothing is fabricated otherwise.
+
 ## How to use this log
 
 - Add a dated, numbered entry (`D-2xx`) when a non-obvious choice is made.
