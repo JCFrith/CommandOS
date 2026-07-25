@@ -7,6 +7,7 @@ import type { Route } from 'next';
 import { createClient } from '@/lib/supabase/server';
 import { configuredAppUrl, isSupabaseConfigured } from '@/lib/env';
 import { credentialsSchema, OAUTH_PROVIDERS, type OAuthProvider } from '@/lib/auth/schema';
+import { emitAuthFailed, emitAuthSucceeded } from '@/services/signals/auth';
 
 export interface AuthActionState {
   error: string | null;
@@ -41,8 +42,12 @@ export async function signInWithPassword(formData: FormData): Promise<AuthAction
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: error.message };
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  if (error) {
+    await emitAuthFailed('password');
+    return { error: error.message };
+  }
+  if (data.user) await emitAuthSucceeded(data.user, 'password');
 
   redirect('/console');
 }

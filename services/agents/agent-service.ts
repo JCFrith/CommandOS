@@ -23,6 +23,10 @@ import {
 } from '@/lib/agents/permissions';
 import { buildAgentExecutionRequest } from '@/lib/agents/execution-request';
 import type { ExecutionRuntime } from '@/lib/ai/runtime/runtime';
+import type { SignalPublisher } from '@/lib/signals/bus';
+import type { SignalSeverity } from '@/lib/signals/types';
+import { rootCorrelation, continueChain } from '@/lib/signals/correlation';
+import { makeEmitter, noopPublisher, type SignalEmit } from '@/services/signals/emit';
 import type { AgentRepository } from './agent-repository';
 
 /** The resolved caller context (shared with operations). */
@@ -70,11 +74,17 @@ const defaultDeps: ServiceDeps = {
  * {@link AgentRepository} and {@link ExecutionRuntime} interfaces.
  */
 export class AgentService {
+  /** Best-effort Signal emitter (see {@link makeEmitter}). */
+  private readonly emit: SignalEmit;
+
   constructor(
     private readonly repo: AgentRepository,
     private readonly runtime: ExecutionRuntime,
     private readonly deps: ServiceDeps = defaultDeps,
-  ) {}
+    publisher: SignalPublisher = noopPublisher,
+  ) {
+    this.emit = makeEmitter(publisher, this.deps);
+  }
 
   /** Agents in the caller's workspace, most-recently-updated first. */
   async list(ctx: AgentContext): Promise<Agent[]> {
@@ -93,11 +103,9 @@ export class AgentService {
 
   /** Create an agent in `draft`, recording a `created` activity entry. */
   async create(ctx: AgentContext, input: unknown): Promise<Agent> {
-    this.assert(
-      canCreateAgent(ctx.workspace),
-      'forbidden',
-      'You do not have permission to create agents.',
-    );
+    if (!canCreateAgent(ctx.workspace)) {
+      await this.deny(ctx, null, 'create agent', 'You do not have permission to create agents.');
+    }
     const data = this.parse(createAgentSchema, input);
     const timestamp = this.deps.now();
 
@@ -118,17 +126,23 @@ export class AgentService {
 
     const created = await this.repo.create(agent);
     await this.record(ctx, created, 'created', 'created this agent');
+    await this.signal(ctx, 'agent.created', created, `created agent "${created.name}"`, {
+      payload: { agentType: created.type, status: created.status },
+    });
     return created;
   }
 
   /** Edit an agent's editable fields (name, description, instructions, capabilities). */
   async update(ctx: AgentContext, id: string, input: unknown): Promise<Agent> {
     const existing = await this.get(ctx, id);
-    this.assert(
-      canManageAgent(ctx.user, ctx.workspace, existing),
-      'forbidden',
-      'You do not have permission to edit this agent.',
-    );
+    if (!canManageAgent(ctx.user, ctx.workspace, existing)) {
+      await this.deny(
+        ctx,
+        existing.id,
+        'edit agent',
+        'You do not have permission to edit this agent.',
+      );
+    }
     if (isTerminal(existing.status)) {
       throw new AgentError('locked', 'Archived agents are read-only.');
     }
@@ -157,17 +171,23 @@ export class AgentService {
 
     const saved = await this.repo.update(updated);
     await this.record(ctx, saved, 'updated', `updated ${changed.join(', ')}`);
+    await this.signal(ctx, 'agent.updated', saved, `updated ${changed.join(', ')}`, {
+      payload: { changed },
+    });
     return saved;
   }
 
   /** Transition an agent's status, enforcing the state machine. */
   async transition(ctx: AgentContext, id: string, input: unknown): Promise<Agent> {
     const existing = await this.get(ctx, id);
-    this.assert(
-      canManageAgent(ctx.user, ctx.workspace, existing),
-      'forbidden',
-      'You do not have permission to change this agent.',
-    );
+    if (!canManageAgent(ctx.user, ctx.workspace, existing)) {
+      await this.deny(
+        ctx,
+        existing.id,
+        'transition agent',
+        'You do not have permission to change this agent.',
+      );
+    }
     const { to } = this.parse(transitionAgentSchema, input);
 
     if (to === existing.status) return existing;
@@ -194,6 +214,21 @@ export class AgentService {
       existing.status,
       to,
     );
+    const transitionType =
+      to === 'active'
+        ? 'agent.activated'
+        : to === 'paused'
+          ? 'agent.paused'
+          : to === 'archived'
+            ? 'agent.archived'
+            : 'agent.status_changed';
+    await this.signal(
+      ctx,
+      transitionType,
+      saved,
+      `moved from ${statusLabel(existing.status)} to ${statusLabel(to)}`,
+      { payload: { from: existing.status, to } },
+    );
     return saved;
   }
 
@@ -206,11 +241,9 @@ export class AgentService {
    */
   async execute(ctx: AgentContext, id: string, input: unknown): Promise<AgentExecution> {
     const agent = await this.get(ctx, id);
-    this.assert(
-      canManageAgent(ctx.user, ctx.workspace, agent),
-      'forbidden',
-      'You do not have permission to run this agent.',
-    );
+    if (!canManageAgent(ctx.user, ctx.workspace, agent)) {
+      await this.deny(ctx, agent.id, 'run agent', 'You do not have permission to run this agent.');
+    }
     if (!isExecutable(agent.status)) {
       throw new AgentError(
         'not_executable',
@@ -218,13 +251,26 @@ export class AgentService {
       );
     }
     // Belt-and-suspenders authz (status + manage), mirrors the UI gate.
-    this.assert(
-      canExecuteAgent(ctx.user, ctx.workspace, agent),
-      'forbidden',
-      'You do not have permission to run this agent.',
-    );
+    if (!canExecuteAgent(ctx.user, ctx.workspace, agent)) {
+      await this.deny(ctx, agent.id, 'run agent', 'You do not have permission to run this agent.');
+    }
+
+    // Mint the correlation id at the head of the run chain — the agent run, the
+    // runtime, the provider call, retries, and completion all share it.
+    const correlationId = this.deps.id();
 
     if (!this.runtime.isAvailable()) {
+      await this.emit({
+        type: 'provider.unavailable',
+        workspaceId: ctx.workspace.id,
+        correlation: rootCorrelation(correlationId),
+        actorId: ctx.user.id,
+        actorName: ctx.user.displayName,
+        summary: 'AI execution unavailable — no model provider is configured.',
+        subjectType: 'agent',
+        subjectId: agent.id,
+        payload: { agentId: agent.id },
+      });
       throw new AgentError(
         'unavailable',
         'AI execution is unavailable — no model provider is configured.',
@@ -255,6 +301,18 @@ export class AgentService {
     };
     execution = await this.repo.createExecution(execution);
 
+    const started = await this.emit({
+      type: 'agent.execution.started',
+      workspaceId: ctx.workspace.id,
+      correlation: rootCorrelation(correlationId),
+      actorId: ctx.user.id,
+      actorName: ctx.user.displayName,
+      summary: `started a run of "${agent.name}"`,
+      subjectType: 'agent',
+      subjectId: agent.id,
+      payload: { executionId: execution.id, agentType: agent.type },
+    });
+
     const request = buildAgentExecutionRequest(
       agent,
       prompt,
@@ -264,6 +322,7 @@ export class AgentService {
         operatorName: ctx.user.displayName,
         subjectId: agent.id,
         subjectType: 'agent',
+        correlationId,
       },
       this.deps.id(),
     );
@@ -291,6 +350,28 @@ export class AgentService {
       'executed',
       execution.status === 'completed' ? 'ran this agent' : 'ran this agent (failed)',
     );
+
+    // Close the chain with an agent-level outcome Signal, correlated to the run.
+    const succeeded = execution.status === 'completed';
+    await this.emit({
+      type: succeeded ? 'agent.execution.completed' : 'agent.execution.failed',
+      workspaceId: ctx.workspace.id,
+      correlation: continueChain(correlationId, started?.id ?? null),
+      actorId: ctx.user.id,
+      actorName: ctx.user.displayName,
+      summary: succeeded
+        ? `"${agent.name}" completed a run`
+        : `"${agent.name}" run ${execution.status}`,
+      subjectType: 'agent',
+      subjectId: agent.id,
+      severity: succeeded ? undefined : 'error',
+      payload: {
+        executionId: execution.id,
+        status: execution.status,
+        durationMs: execution.durationMs ?? 0,
+        model: execution.model ?? 'unknown',
+      },
+    });
     return execution;
   }
 
@@ -344,6 +425,52 @@ export class AgentService {
 
   private assert(ok: boolean, code: AgentErrorCode, message: string): void {
     if (!ok) throw new AgentError(code, message);
+  }
+
+  /** Emit a workspace-scoped lifecycle Signal for an agent (best-effort). */
+  private async signal(
+    ctx: AgentContext,
+    type: string,
+    agent: Agent,
+    summary: string,
+    extra?: {
+      severity?: SignalSeverity;
+      payload?: Record<string, string | number | boolean | string[]>;
+    },
+  ): Promise<void> {
+    await this.emit({
+      type,
+      workspaceId: agent.workspaceId,
+      correlation: rootCorrelation(this.deps.id()),
+      actorId: ctx.user.id,
+      actorName: ctx.user.displayName,
+      summary,
+      subjectType: 'agent',
+      subjectId: agent.id,
+      severity: extra?.severity,
+      payload: extra?.payload,
+    });
+  }
+
+  /** Emit a PermissionDenied Signal and throw a forbidden error (never returns). */
+  private async deny(
+    ctx: AgentContext,
+    subjectId: string | null,
+    action: string,
+    message: string,
+  ): Promise<never> {
+    await this.emit({
+      type: 'authz.permission_denied',
+      workspaceId: ctx.workspace.id,
+      correlation: rootCorrelation(this.deps.id()),
+      actorId: ctx.user.id,
+      actorName: ctx.user.displayName,
+      summary: `denied: ${action}`,
+      subjectType: 'agent',
+      subjectId,
+      payload: { action, resource: 'agent' },
+    });
+    throw new AgentError('forbidden', message);
   }
 }
 

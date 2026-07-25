@@ -22,3 +22,11 @@ export function paletteOperationsUrl(workspaceId: string): string {
 export function paletteAgentsUrl(workspaceId: string): string {
   return `/api/agents?workspaceId=${encodeURIComponent(workspaceId)}`;
 }
+
+export function paletteSignalsKey(workspaceId: string | null) {
+  return ['palette-signals', workspaceId] as const;
+}
+
+export function paletteSignalsUrl(workspaceId: string): string {
+  return `/api/signals?workspaceId=${encodeURIComponent(workspaceId)}`;
+}

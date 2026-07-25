@@ -1,4 +1,13 @@
-import { Activity, Bot, LayoutDashboard, Plus, Radio, Settings } from 'lucide-react';
+import {
+  Activity,
+  Bot,
+  HeartPulse,
+  LayoutDashboard,
+  Plus,
+  Radio,
+  Settings,
+  Waypoints,
+} from 'lucide-react';
 
 import type { Command, CommandGroup } from '@/types';
 import { COMMAND_GROUP_LABELS } from '@/types';
@@ -71,10 +80,39 @@ export const COMMANDS: readonly Command[] = [
     icon: Bot,
     keywords: ['add', 'ai', 'assistant', 'create'],
   },
+  {
+    id: 'signals.health',
+    label: 'View Runtime & Provider Health',
+    description: 'Provider, runtime, and signal-bus status',
+    group: 'system',
+    icon: HeartPulse,
+    keywords: ['health', 'status', 'provider', 'runtime', 'uptime', 'monitoring'],
+  },
+  {
+    id: 'signals.correlations',
+    label: 'View Correlations',
+    description: 'Trace execution chains end to end',
+    group: 'system',
+    icon: Waypoints,
+    keywords: ['correlation', 'trace', 'chain', 'flow'],
+  },
+  {
+    id: 'signals.errors',
+    label: 'Filter Signals: Errors',
+    description: 'Signals at error severity and above',
+    group: 'system',
+    icon: Radio,
+    keywords: ['filter', 'errors', 'failures', 'signals', 'alerts'],
+  },
 ] as const;
 
 /** Command ids that trigger an action rather than navigation. */
-export type ActionCommandId = 'create.operation' | 'create.agent';
+export type ActionCommandId =
+  | 'create.operation'
+  | 'create.agent'
+  | 'signals.health'
+  | 'signals.correlations'
+  | 'signals.errors';
 
 /** Ordered list of the groups that actually contain commands. */
 export function commandGroups(): { group: CommandGroup; label: string; commands: Command[] }[] {

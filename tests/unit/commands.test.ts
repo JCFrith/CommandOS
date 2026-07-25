@@ -6,7 +6,8 @@ describe('command registry', () => {
     const groups = commandGroups();
     // The 'agent' group is empty since Sprint 4 retired the `agent.dispatch`
     // placeholder in favour of real agents (create.agent lives in 'create').
-    expect(groups.map((g) => g.group)).toEqual(['navigate', 'create']);
+    // Sprint 5 adds real 'system' commands (signal health / correlations / errors).
+    expect(groups.map((g) => g.group)).toEqual(['navigate', 'create', 'system']);
     for (const section of groups) {
       expect(section.commands.length).toBeGreaterThan(0);
     }
