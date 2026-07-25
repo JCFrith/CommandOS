@@ -327,6 +327,26 @@ scoped to a reserved `system` workspace (never surfaced in a tenant view) and
 carries only the method — no email, no credentials. Auth signals fire only when
 auth is actually configured and exercised; nothing is fabricated otherwise.
 
+## Release confirmations (2026-07-25 — v0.5.0)
+
+Confirmed by the product owner at the Sprint 5 release:
+
+- **D-501 approved — Signals remain additive.** `OperationActivity`,
+  `AgentActivity`, and the `ExecutionLogger` stay intact until a future migration
+  sprint; **TD-23** stays open until every timeline is migrated to the shared
+  Signal timeline engine.
+- **D-503 / D-504 approved — the `ExecutionRuntime` is an event producer.** It
+  must continue to depend only on the `SignalPublisher` abstraction, and must
+  never couple directly to `SignalBus` or persistence.
+- **D-507 approved — authentication failures remain `system`-scoped.** They must
+  never leak user identity, credentials, or tenant information; a tenant workspace
+  must never receive another tenant's authentication telemetry.
+- **D-506 approved — notifications remain interface-only.** No delivery channels
+  until the Notifications sprint.
+- **Release.** `sprint-5-signals-observability` merged into `main` with a
+  **non-fast-forward** merge (history preserved, not squashed) and tagged
+  **v0.5.0**; `v0.4.5` and all earlier tags are unchanged.
+
 ## How to use this log
 
 - Add a dated, numbered entry (`D-2xx`) when a non-obvious choice is made.

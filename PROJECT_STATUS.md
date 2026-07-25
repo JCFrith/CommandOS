@@ -1,15 +1,15 @@
 # PROJECT_STATUS
 
-_Last updated on the `sprint-5-signals-observability` branch (not merged, not tagged)._
+_Last updated at the Sprint 5 — Signals & Observability release (`v0.5.0`)._
 
 ## Current Sprint
 
-**Sprint 5 — Signals & Observability Platform** 🚧 implemented on
-`sprint-5-signals-observability` (not merged, not tagged). The platform-wide event
-and observability system: every subsystem emits **Signals**, the canonical event
-model, distributed by a reusable `SignalBus` into an append-only
-`SignalEventStore`, with correlation tracking, a timeline engine, metrics, health,
-and a subscription engine. Emission is additive and behavior-preserving.
+**Sprint 5 — Signals & Observability Platform** ✅ complete — reviewed, merged to
+`main`, tagged `v0.5.0`. The platform-wide event and observability system: every
+subsystem emits **Signals**, the canonical event model, distributed by a reusable
+`SignalBus` into an append-only `SignalEventStore`, with correlation tracking, a
+timeline engine, metrics, health, and a subscription engine. Emission is additive
+and behavior-preserving.
 
 **Sprint 4.5 — AI Runtime & Platform Foundation** ✅ complete — merged to `main`,
 tagged `v0.4.5`. `ModelProvider` and `ExecutionRuntime` are the canonical AI
@@ -381,7 +381,10 @@ honest provider `unavailable` state; the notification framework is interface-onl
 
 ## Next Sprint
 
-**Sprint 6** (not started)
+**Sprint 6 — Workflows & Automation** (planned, not started)
 
-> Sprint 5 is complete on its branch (`sprint-5-signals-observability`) but **not
-> merged, not tagged**. Sprint 6 has **not** been started.
+> Sprint 5 is merged to `main` and tagged `v0.5.0`. A detailed Sprint 6
+> architecture + implementation plan (workflow domain/execution model, triggers,
+> conditions, branching, variables, approvals, scheduling, retries, manual
+> intervention, cancellation, resumability, audit, and Signal/AI/Operations/Agent
+> integration) is prepared; **no Sprint 6 code has been written.**

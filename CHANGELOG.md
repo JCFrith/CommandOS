@@ -9,9 +9,13 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 5 — **Signals & Observability Platform** (on `sprint-5-signals-observability`;
-not merged, not tagged). The platform-wide event and observability system: every
-subsystem now emits **Signals**, the canonical event model. Emission is additive
+_Nothing yet._
+
+## [0.5.0] — 2026-07-25
+
+Sprint 5 — **Signals & Observability Platform**. The platform-wide event and
+observability system: every subsystem now emits **Signals**, the canonical event
+model. Emission is additive
 and behavior-preserving — existing Operations/Agents/runtime behavior, the
 per-feature activity timelines, and the execution logger are unchanged.
 
@@ -264,7 +268,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.0
 [0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
 [0.4.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.0
 [0.3.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.3.0
