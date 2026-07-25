@@ -9,7 +9,45 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet — Sprint 4 (Agents & AI) has not started._
+Sprint 4 — **Agents & AI**. Implemented on branch `sprint-4-agents-ai` (not
+merged or tagged). The Agents vertical slice with an AI execution workflow behind
+a provider interface, on the development in-memory store.
+
+### Added
+
+- Agent domain: workspace-scoped `Agent` (type, capabilities, instructions,
+  audit fields), a management lifecycle state machine (`draft → active ⇄ paused`,
+  `→ disabled → active`, `→ archived`), an immutable `AgentActivity` timeline, and
+  `AgentExecution` records with a structured, validated result.
+- `AgentRepository` interface + labelled **development-only in-memory
+  implementation**; `AgentService` owning validation, RBAC + ownership, lifecycle
+  enforcement, workspace scoping, execution orchestration, and activity.
+- AI provider boundary (`lib/ai`): `AIProvider` interface, an OpenAI adapter
+  (server-only, centralized model selection, strict structured output, timeout,
+  safe errors) and a deterministic `FakeAIProvider` for tests. Model calls never
+  originate in UI; operator content never enters the trusted system prompt.
+- Agent surfaces: list, detail (run interface, run history, lifecycle controls,
+  activity), create, and edit — plus loading and error boundaries and honest
+  loading / empty / unavailable / error / success / not-found / permission-denied
+  states. AI-generated content is rendered as text only.
+- Server Actions for create, edit, transition, and run (the run returns the
+  completed/failed execution inline — never a fabricated success).
+- Workspace-scoped `/api/agents` (and now `/api/operations`) palette feeds; ⌘K
+  actions to create, find, open, and run agents.
+- **TD-13 resolved**: command-palette queries are keyed and requested by the
+  active workspace, so a workspace switch never surfaces stale results.
+- shadcn `textarea` reuse; shared `lib/authz/roles` and
+  `services/workspace/context` (operations refactored onto them).
+- 55 unit/component tests (state machine, permissions, schema, repository,
+  service + execution scenarios, AI provider boundary, missing config, timeout,
+  failure, invalid output, command registration, workspace-scoped palette, and
+  the agent form).
+
+### Changed
+
+- The `create.operation` / `create.agent` palette actions open their create
+  forms; the Sprint-1 `agent.dispatch` placeholder was retired.
+- `OperationsContext` / operations context now alias the shared workspace context.
 
 ## [0.3.0] — 2026-07-25
 
