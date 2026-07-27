@@ -327,6 +327,44 @@ scoped to a reserved `system` workspace (never surfaced in a tenant view) and
 carries only the method — no email, no credentials. Auth signals fire only when
 auth is actually configured and exercised; nothing is fabricated otherwise.
 
+## Sprint 5.5 — Platform Runtime (2026-07-27)
+
+Architectural refactor: promote the reusable runtime primitives out of the AI
+runtime into a shared platform layer. No new features; behavior identical. Full
+design in `docs/platform-runtime.md`.
+
+### D-551 · A platform runtime owns the AI-agnostic primitives
+
+`lib/platform/` owns retry, cancellation, execution identifiers, correlation, the
+generic execution status machine + context + events, and the background/queue/
+worker/scheduler/job-store contracts. These are not AI-specific, so every runtime
+(AI today; Workflow / Notification / Integration tomorrow) depends on one
+foundation instead of reaching into `lib/ai`.
+
+### D-552 · Dependency direction is one-way: Feature → Platform → AI
+
+`lib/platform` must **never** import `lib/ai` (or Signals / services / app).
+Verified by inspection: platform has zero upward imports. The AI runtime consumes
+the platform; the AI `ExecutionRuntime` remains AI-specific and stays in `lib/ai`.
+This keeps the platform reusable by non-AI runtimes with no coupling.
+
+### D-553 · Background contracts are payload-generic, not AI-coupled
+
+The queue/worker/scheduler/job-store interfaces were parameterized over the AI
+`ExecutionRequest`/`Execution`, which made them unusable by other runtimes. They
+are now generic over a `Job<T>` tagged by `kind`, with a `JobHandler` binding a
+kind to its runtime — so a future `WorkflowRuntime`/`NotificationRuntime` consumes
+them unchanged. They remain interface-only (TD-19); the generalization was safe
+because they had no consumers yet.
+
+### D-554 · Preserve public contracts across the move
+
+`retry`/`cancellation` were `git mv`d (history preserved); the AI
+`runtime/execution.ts` re-exports the platform primitives; the AI runtime barrel
+re-exports platform retry/cancellation for convenience; and
+`@/lib/signals/correlation` re-exports the generic chain constructors. Existing
+import paths keep working, so the refactor is behavior- and contract-preserving.
+
 ## Release confirmations (2026-07-25 — v0.5.0)
 
 Confirmed by the product owner at the Sprint 5 release:

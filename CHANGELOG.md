@@ -9,7 +9,34 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet._
+Sprint 5.5 — **Platform Runtime** (on `sprint-5.5-platform-runtime`; not merged,
+not tagged). An architectural refactor: promote the reusable, AI-agnostic runtime
+primitives out of the AI runtime into a shared platform layer so Workflows,
+Notifications, Scheduling, Background Execution, and future subsystems depend on a
+common foundation. **No user-facing features; application behavior is identical.**
+
+### Changed
+
+- **New `lib/platform/`** owns the domain-neutral primitives: `RetryPolicy` +
+  `runWithRetry` (moved from `lib/ai/runtime/retry`), cancellation (moved from
+  `lib/ai/runtime/cancellation`), execution identifiers (`ids.ts`), correlation
+  helpers (`correlation.ts`), the generic execution status machine + context +
+  events (`execution.ts`), and the background/queue/worker/scheduler/job-store
+  contracts (`background.ts`).
+- **Dependency direction enforced:** `Feature → Platform → AI (optional)`.
+  `lib/platform/**` imports nothing from `lib/ai`, `lib/signals`, `services`, or
+  `app` (verified). The AI `ExecutionRuntime` now **consumes** the platform.
+- **Background contracts generalized:** the queue/worker/scheduler/job-store
+  interfaces are now payload-generic (`Job<T>` tagged by `kind`) instead of being
+  coupled to the AI `ExecutionRequest`/`Execution`, so a future `WorkflowRuntime`/
+  `NotificationRuntime` consumes them without modification (interface-only, TD-19).
+- **Contracts preserved:** `@/lib/ai/runtime/execution` re-exports the generic
+  primitives; the AI runtime barrel re-exports platform retry/cancellation for
+  convenience; `@/lib/signals/correlation` re-exports `rootCorrelation`/
+  `continueChain` and builds `childOf`/`groupByCorrelation` on the platform.
+- New design doc `docs/platform-runtime.md`; 7 net-new platform tests (ids,
+  correlation, execution status machine, generic `Job` shape). All prior tests
+  pass unchanged (203 total).
 
 ## [0.5.0] — 2026-07-25
 
