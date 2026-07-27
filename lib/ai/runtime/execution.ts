@@ -2,66 +2,38 @@ import type { z } from 'zod';
 
 import type { Conversation } from '@/lib/ai/conversation/conversation';
 import type { StructuredOutputSpec } from '@/lib/ai/provider/provider';
-import type { CancellationToken } from './cancellation';
-import type { RetryPolicy } from './retry';
+import type { CancellationToken } from '@/lib/platform/cancellation';
+import type { RetryPolicy } from '@/lib/platform/retry';
 import type { TokenUsage, CostEstimate } from './accounting';
 
 /**
- * The execution domain model — a provider- and feature-agnostic description of
- * one AI run. The current runtime exercises only synchronous execution, but the
- * shape (kind, status set, events) supports async / scheduled / autonomous
- * execution without a redesign.
+ * The AI execution domain model — the AI-specific layer over the generic
+ * platform execution primitives (`lib/platform/execution.ts`). The status
+ * machine, `ExecutionKind`, `ExecutionContext`, and `ExecutionEvent` are owned
+ * by the platform and re-exported here so existing imports of this module keep
+ * working; this file adds only what is AI-specific: a typed `ExecutionRequest`
+ * (conversation + structured output), the validated `ExecutionResult`, the
+ * token/cost-bearing `ExecutionMetadata`, the AI `ExecutionError` codes, and the
+ * full `Execution` record.
  */
 
-/** How an execution is driven. Only `synchronous` is exercised today. */
-export type ExecutionKind = 'synchronous' | 'asynchronous' | 'scheduled' | 'autonomous';
-
-/** The lifecycle status of an execution. */
-export type ExecutionStatus =
-  'queued' | 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
-
-/** Statuses from which no further transition is possible. */
-export const TERMINAL_STATUSES: readonly ExecutionStatus[] = [
-  'completed',
-  'failed',
-  'cancelled',
-  'timed_out',
-];
-
-const TRANSITIONS: Record<ExecutionStatus, readonly ExecutionStatus[]> = {
-  queued: ['pending', 'cancelled'],
-  pending: ['running', 'cancelled'],
-  running: ['completed', 'failed', 'cancelled', 'timed_out'],
-  completed: [],
-  failed: [],
-  cancelled: [],
-  timed_out: [],
-};
-
-export function canTransition(from: ExecutionStatus, to: ExecutionStatus): boolean {
-  return TRANSITIONS[from].includes(to);
-}
-
-export function isTerminalStatus(status: ExecutionStatus): boolean {
-  return TERMINAL_STATUSES.includes(status);
-}
-
-/** Who and where an execution runs — ids only, never secrets. */
-export interface ExecutionContext {
-  workspaceId: string;
-  operatorId: string;
-  operatorName: string;
-  /** Optional correlation id linking this run to a domain record (e.g. agent). */
-  subjectId?: string;
-  subjectType?: string;
-  /**
-   * The Signal correlation id for the chain this execution belongs to. When set
-   * (e.g. by the agent service, which mints it at the head of the run), the
-   * runtime tags every execution Signal it emits with this id, so the whole
-   * chain — agent run → runtime → provider → completion — shares one correlation.
-   */
-  correlationId?: string;
-}
+// Generic execution primitives are owned by the platform runtime.
+export {
+  TERMINAL_STATUSES,
+  canTransition,
+  isTerminalStatus,
+  type ExecutionKind,
+  type ExecutionStatus,
+  type ExecutionContext,
+  type ExecutionEvent,
+  type ExecutionEventType,
+} from '@/lib/platform/execution';
+import type {
+  ExecutionContext,
+  ExecutionEvent,
+  ExecutionStatus,
+  ExecutionKind,
+} from '@/lib/platform/execution';
 
 /** A typed request to run one execution producing a `T`-shaped structured output. */
 export interface ExecutionRequest<T> {
@@ -110,25 +82,6 @@ export interface ExecutionError {
   catalogCode: string;
   message: string;
   retryable: boolean;
-}
-
-export type ExecutionEventType =
-  | 'created'
-  | 'queued'
-  | 'started'
-  | 'retrying'
-  | 'tool_invoked'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-
-/** An immutable timeline entry recording a state change or notable moment. */
-export interface ExecutionEvent {
-  at: string;
-  type: ExecutionEventType;
-  status: ExecutionStatus;
-  detail?: string;
 }
 
 /** The full record of one execution. */

@@ -6,7 +6,7 @@ import {
   exponentialRetry,
   fixedRetry,
   runWithRetry,
-} from '@/lib/ai/runtime/retry';
+} from '@/lib/platform/retry';
 
 describe('retry policies', () => {
   it('computes delays per kind and stops at maxAttempts', () => {
