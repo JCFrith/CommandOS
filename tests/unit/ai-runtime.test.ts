@@ -5,8 +5,8 @@ import { ExecutionRuntime } from '@/lib/ai/runtime/runtime';
 import { FakeModelProvider } from '@/lib/ai/provider/fake';
 import { ProviderError } from '@/lib/ai/provider/provider';
 import { createConversation, systemPrompt, userInput } from '@/lib/ai/conversation/conversation';
-import { createCancellation } from '@/lib/ai/runtime/cancellation';
-import { NO_RETRY, fixedRetry } from '@/lib/ai/runtime/retry';
+import { createCancellation } from '@/lib/platform/cancellation';
+import { NO_RETRY, fixedRetry } from '@/lib/platform/retry';
 import type { ExecutionLog, ExecutionLogger } from '@/lib/ai/runtime/logging';
 import type { ExecutionRequest } from '@/lib/ai/runtime/execution';
 

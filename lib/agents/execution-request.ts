@@ -1,7 +1,7 @@
 import type { Agent, AgentExecutionResult } from '@/types';
 import { createConversation, userInput } from '@/lib/ai/conversation/conversation';
 import { executionResultSchema, EXECUTION_RESULT_JSON_SCHEMA } from '@/lib/agents/result-schema';
-import { exponentialRetry } from '@/lib/ai/runtime/retry';
+import { exponentialRetry } from '@/lib/platform/retry';
 import type { ExecutionContext, ExecutionRequest } from '@/lib/ai/runtime/execution';
 import {
   AGENT_PROMPT_VERSION,

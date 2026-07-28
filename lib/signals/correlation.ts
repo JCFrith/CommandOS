@@ -1,47 +1,33 @@
 import type { Signal, SignalCorrelation } from './types';
+import { childRef } from '@/lib/platform/correlation';
 
 /**
- * Correlation tracking — the thread that ties one logical chain of work together
- * across subsystems.
+ * Signal-specific correlation helpers, built on the platform correlation
+ * primitives (`@/lib/platform/correlation`).
  *
- * A correlation id is minted once at the head of a chain (e.g. when an operator
- * runs an agent) and then carried, unchanged, through every downstream step:
+ * The generic chain constructors — `rootCorrelation` / `continueChain` — are
+ * owned by the platform and re-exported here so existing signal emitters keep
+ * importing them from `@/lib/signals/correlation` unchanged. This module adds
+ * only what is Signal-shaped: deriving a child from a {@link Signal} and
+ * grouping signals into chains.
+ *
+ * A correlation id is minted once at the head of a chain (e.g. an agent run) and
+ * carried unchanged through every downstream step:
  *
  * ```
- * Agent run → Execution runtime → Provider call → Retry → Completion
- *      └──────────────── one correlationId ────────────────┘
+ * Agent run → Execution runtime → Provider call → Retry → Completion → Signal timeline
+ *      └──────────────────────── one correlationId ────────────────────────┘
  * ```
- *
- * Every signal emitted anywhere in that chain preserves the id automatically
- * (the emitters thread {@link SignalCorrelation} into `createSignal`), so the
- * timeline and correlation views can reconstruct the whole flow — and a future
- * notification can reference it — without any per-feature plumbing.
  */
 
-/** A correlation with no parent — the head of a new chain. */
-export function rootCorrelation(correlationId: string): SignalCorrelation {
-  return { correlationId, parentId: null };
-}
+export { rootCorrelation, continueChain, type CorrelationRef } from '@/lib/platform/correlation';
 
 /**
  * Derive the correlation for a child signal caused by `parent`: it inherits the
- * parent's `correlationId` and records the parent's id as its `parentId`. This
- * is how causal depth is preserved within a single chain.
+ * parent's `correlationId` and records the parent's id as its `parentId`.
  */
 export function childOf(parent: Signal): SignalCorrelation {
-  return { correlationId: parent.correlationId, parentId: parent.id };
-}
-
-/**
- * Continue an existing chain at the same causal level (same `correlationId`,
- * optionally under a known parent). Used when several sibling signals belong to
- * one chain (e.g. the runtime's execution events under an agent run).
- */
-export function continueChain(
-  correlationId: string,
-  parentId: string | null = null,
-): SignalCorrelation {
-  return { correlationId, parentId };
+  return childRef(parent);
 }
 
 /** Group signals by their correlation id (chain → signals, insertion order). */

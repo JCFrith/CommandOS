@@ -1,8 +1,17 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 5 — Signals & Observability release (`v0.5.0`)._
+_Last updated at the Sprint 5.5 — Platform Runtime release (`v0.5.5`)._
 
 ## Current Sprint
+
+**Sprint 5.5 — Platform Runtime** ✅ complete — reviewed, merged to `main`, tagged
+`v0.5.5`. Promotes the reusable, AI-agnostic runtime primitives (retry,
+cancellation, ids, correlation, the execution status machine + context + events,
+and the background/queue/worker/scheduler/job-store contracts) out of
+`lib/ai/runtime` into a shared `lib/platform`. Dependency direction is enforced
+`Feature → Platform → AI (optional)`; the AI `ExecutionRuntime` now consumes the
+platform. **No user-facing features; behavior is identical** (see
+`docs/platform-runtime.md`).
 
 **Sprint 5 — Signals & Observability Platform** ✅ complete — reviewed, merged to
 `main`, tagged `v0.5.0`. The platform-wide event and observability system: every
@@ -186,10 +195,10 @@ unavailable) — all pass.
 
 ## Test Status
 
-| Suite            | Result                                                     |
-| ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 196 passing across 37 files (51 net-new for Signals)    |
-| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
+| Suite            | Result                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Unit (Vitest)    | ✅ 203 passing across 38 files (7 net-new for the platform runtime) |
+| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)          |
 
 Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired
 `SignalBus` + append-only `SignalEventStore` + `SignalsService`** with feature

@@ -1,5 +1,7 @@
 import { estimateCost, type TokenUsage } from './accounting';
-import { createCancellation, type CancellationToken } from './cancellation';
+import { createCancellation, type CancellationToken } from '@/lib/platform/cancellation';
+import { runWithRetry } from '@/lib/platform/retry';
+import { continueChain } from '@/lib/platform/correlation';
 import {
   canTransition,
   type Execution,
@@ -10,12 +12,10 @@ import {
   type ExecutionStatus,
 } from './execution';
 import { executionLogger, toExecutionLog, type ExecutionLogger } from './logging';
-import { runWithRetry } from './retry';
 import { ProviderError, type ModelProvider, type ModelResponse } from '@/lib/ai/provider/provider';
 import type { SignalPublisher } from '@/lib/signals/bus';
 import type { SignalSeverity } from '@/lib/signals/types';
 import { createSignal, type SignalDeps } from '@/lib/signals/signal';
-import { continueChain } from '@/lib/signals/correlation';
 
 /** Injectable clock / id / sleep / monotonic + logger for determinism + audit. */
 export interface RuntimeDeps {
