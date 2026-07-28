@@ -35,7 +35,7 @@ The platform layer sits below every feature and every specialised runtime, and
 
 | Module                     | Contracts                                                                                                                                                                                      |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `platform/ids.ts`          | `newId` / `newExecutionId` / `newCorrelationId` / `newJobId` — one id scheme for every runtime                                                                                                 |
+| `platform/ids.ts`          | `newId` / `newCorrelationId` — one id scheme for every runtime (runtimes add job/execution aliases where consumed)                                                                             |
 | `platform/correlation.ts`  | `CorrelationRef`, `rootCorrelation`, `continueChain`, `childRef` — the causal thread, domain-agnostic                                                                                          |
 | `platform/retry.ts`        | `RetryPolicy` (`no`/`fixed`/`exponential`), `runWithRetry`, `delayForAttempt`                                                                                                                  |
 | `platform/cancellation.ts` | `CancellationToken` / `CancellationSource` / `createCancellation` (over `AbortSignal`)                                                                                                         |
