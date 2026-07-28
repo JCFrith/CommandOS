@@ -1,10 +1,19 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 5.5 — Platform Runtime release (`v0.5.5`)._
+_Last updated on the `sprint-6-workflows` branch (not merged, not tagged)._
 
 ## Current Sprint
 
-**Sprint 5.5 — Platform Runtime** ✅ complete — reviewed, merged to `main`, tagged
+**Sprint 6 — Workflows & Automation Platform** 🚧 implemented on
+`sprint-6-workflows` (not merged, not tagged). Declarative, versioned automation
+graphs (`WorkflowRuntime`) that orchestrate Operations, Agents, the AI runtime,
+and Signals — triggered by signals/schedules/manually, with conditions,
+branching, parallel+join, delays, approvals, retries, timeouts, cancellation, and
+**resumability** via per-node checkpoints. The runtime consumes only the Platform
+Runtime + injected ports (never `lib/ai`); run history is reconstructed from
+Signals (see `docs/workflows.md`, `docs/workflow-runtime.md`).
+
+**Sprint 5.5 — Platform Runtime** ✅ complete — merged to `main`, tagged
 `v0.5.5`. Promotes the reusable, AI-agnostic runtime primitives (retry,
 cancellation, ids, correlation, the execution status machine + context + events,
 and the background/queue/worker/scheduler/job-store contracts) out of
@@ -195,10 +204,10 @@ unavailable) — all pass.
 
 ## Test Status
 
-| Suite            | Result                                                              |
-| ---------------- | ------------------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 203 passing across 38 files (7 net-new for the platform runtime) |
-| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)          |
+| Suite            | Result                                                     |
+| ---------------- | ---------------------------------------------------------- |
+| Unit (Vitest)    | ✅ 233 passing across 43 files (21 net-new for Workflows)  |
+| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired
 `SignalBus` + append-only `SignalEventStore` + `SignalsService`** with feature

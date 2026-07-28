@@ -365,6 +365,58 @@ re-exports platform retry/cancellation for convenience; and
 `@/lib/signals/correlation` re-exports the generic chain constructors. Existing
 import paths keep working, so the refactor is behavior- and contract-preserving.
 
+## Sprint 6 — Workflows & Automation (2026-07-27)
+
+Build the workflow platform on the completed foundation. Full design in
+`docs/workflows.md` and `docs/workflow-runtime.md`.
+
+### D-601 · WorkflowRuntime consumes the Platform Runtime, never AI directly
+
+`WorkflowRuntime` (`lib/workflows/runtime`) depends only on the Platform Runtime
+(retry, cancellation, correlation), Signals (emission), and injected **capability
+ports** (`WorkflowCapabilities`, `WorkflowRunSink`). Agent/operation actions are
+reached through adapters injected by the wiring layer — the runtime never imports
+`lib/ai` or feature services. It is a **peer** of the AI `ExecutionRuntime`, not a
+subclass (honors D-552).
+
+### D-602 · Workflow history is reconstructed from Signals
+
+There is no bespoke workflow-history table. `WorkflowStepRun` checkpoints exist
+for **resumability** (execution state); the human-facing audit history is the
+`workflow.*` Signal stream rendered by the Timeline Engine (subject = the run).
+This is the first domain to fully realize the D-501 "timeline from Signals"
+vision.
+
+### D-603 · Conditions are a safe structured expression, not a string language
+
+`condition`/`branch` guards use a structured `Condition` AST evaluated by
+`conditions.ts` — no `eval`, no code execution, only variable lookups + literals +
+comparisons + boolean combinators over the flat variable store. Injection-proof
+and deterministic. Variables are bounded JSON-safe primitives.
+
+### D-604 · Resumability via per-node checkpoints + frontier persistence
+
+A run persists its `frontier`, `variables`, and `joinArrivals`, and appends an
+immutable `WorkflowStepRun` per node. Suspension (`waiting_approval`/
+`waiting_timer`) returns control; `resume` re-enters the processor and skips
+completed steps by node id (idempotent). This is the seam for durable, cross-
+restart resumability once persistence lands.
+
+### D-605 · Triggered runs execute as an owner-scoped context (dev model)
+
+Signal/scheduled runs have no interactive caller, so the capability adapter
+reconstructs an owner-scoped `WorkspaceContext` from the run context (personal
+workspace, mirroring D-306). Team-workspace role fidelity for triggered runs is
+future work (TD-33). A self-trigger guard drops `source: 'workflows'` signals so a
+workflow cannot trigger itself into a cascade.
+
+### D-606 · Dev in-memory persistence behind a repository interface
+
+Workflows/versions/runs/steps/approvals run on a dev in-memory
+`WorkflowRepository` (globalThis-pinned), like every other domain (D-302). The
+runtime checkpoints through the `WorkflowRunSink` subset of that interface; the
+Supabase adapter swaps in without changing the runtime, service, or UI.
+
 ## Release confirmations (2026-07-27 — v0.5.5)
 
 Confirmed by the product owner at the Sprint 5.5 release:
