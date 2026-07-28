@@ -38,6 +38,7 @@ import type { Command, OperationStatus, AgentStatus, AgentType } from '@/types';
 const ACTION_ROUTES: Record<ActionCommandId, Route> = {
   'create.operation': '/console/operations/new' as Route,
   'create.agent': '/console/agents/new' as Route,
+  'create.workflow': '/console/workflows/new' as Route,
   'signals.health': '/console/signals?view=health' as Route,
   'signals.correlations': '/console/signals?view=correlations' as Route,
   'signals.errors': '/console/signals?severity=error' as Route,

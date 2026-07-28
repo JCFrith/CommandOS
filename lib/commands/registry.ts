@@ -7,6 +7,7 @@ import {
   Radio,
   Settings,
   Waypoints,
+  Workflow,
 } from 'lucide-react';
 
 import type { Command, CommandGroup } from '@/types';
@@ -56,6 +57,15 @@ export const COMMANDS: readonly Command[] = [
     keywords: ['tasks', 'jobs', 'work'],
   },
   {
+    id: 'nav.workflows',
+    label: 'Go to Workflows',
+    description: 'Automation across the platform',
+    group: 'navigate',
+    icon: Workflow,
+    href: '/console/workflows',
+    keywords: ['automation', 'triggers', 'orchestration', 'pipelines'],
+  },
+  {
     id: 'nav.settings',
     label: 'Go to Settings',
     group: 'navigate',
@@ -79,6 +89,14 @@ export const COMMANDS: readonly Command[] = [
     group: 'create',
     icon: Bot,
     keywords: ['add', 'ai', 'assistant', 'create'],
+  },
+  {
+    id: 'create.workflow',
+    label: 'New Workflow',
+    description: 'Automate work across the platform',
+    group: 'create',
+    icon: Workflow,
+    keywords: ['add', 'automation', 'workflow', 'create'],
   },
   {
     id: 'signals.health',
@@ -110,6 +128,7 @@ export const COMMANDS: readonly Command[] = [
 export type ActionCommandId =
   | 'create.operation'
   | 'create.agent'
+  | 'create.workflow'
   | 'signals.health'
   | 'signals.correlations'
   | 'signals.errors';

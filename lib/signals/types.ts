@@ -61,6 +61,7 @@ export type SignalSource =
   | 'auth'
   | 'authz'
   | 'workspace'
+  | 'workflows'
   | 'commands'
   | 'signals';
 
@@ -72,6 +73,7 @@ export const SIGNAL_SOURCES: readonly SignalSource[] = [
   'auth',
   'authz',
   'workspace',
+  'workflows',
   'commands',
   'signals',
 ];
