@@ -365,6 +365,30 @@ re-exports platform retry/cancellation for convenience; and
 `@/lib/signals/correlation` re-exports the generic chain constructors. Existing
 import paths keep working, so the refactor is behavior- and contract-preserving.
 
+## Release confirmations (2026-07-27 — v0.5.5)
+
+Confirmed by the product owner at the Sprint 5.5 release:
+
+- **D-551 approved** — `lib/platform` is the canonical owner of all AI-agnostic
+  runtime primitives; AI may no longer own infrastructure intended for reuse by
+  other runtimes.
+- **D-552 approved** — dependency direction is permanently `Feature → Platform →
+AI (optional)`; the platform must never import AI, Signals, Services, App, or
+  any feature domain.
+- **D-553 approved** — payload-generic background contracts are the correct
+  abstraction; future `WorkflowRuntime`/`NotificationRuntime`/`IntegrationRuntime`/
+  `Scheduler` implementations consume them unchanged.
+- **D-554 approved** — public compatibility via re-exports is retained; existing
+  imports stay stable until a future cleanup sprint.
+- **Correlation ownership approved** — correlation is a platform concern
+  (`lib/platform/correlation`); Signals consume it rather than owning it.
+- **AI accounting ownership approved** — token usage and cost estimation remain
+  AI-specific (`lib/ai/runtime/accounting`); the platform must never become aware
+  of AI token concepts.
+- **Release.** `sprint-5.5-platform-runtime` merged into `main` with a
+  **non-fast-forward** merge (history preserved) and tagged **v0.5.5**; `v0.5.0`
+  and all earlier tags are unchanged.
+
 ## Release confirmations (2026-07-25 — v0.5.0)
 
 Confirmed by the product owner at the Sprint 5 release:

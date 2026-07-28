@@ -9,11 +9,15 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 5.5 — **Platform Runtime** (on `sprint-5.5-platform-runtime`; not merged,
-not tagged). An architectural refactor: promote the reusable, AI-agnostic runtime
-primitives out of the AI runtime into a shared platform layer so Workflows,
-Notifications, Scheduling, Background Execution, and future subsystems depend on a
-common foundation. **No user-facing features; application behavior is identical.**
+_Nothing yet._
+
+## [0.5.5] — 2026-07-27
+
+Sprint 5.5 — **Platform Runtime**. An architectural refactor: promote the
+reusable, AI-agnostic runtime primitives out of the AI runtime into a shared
+platform layer so Workflows, Notifications, Scheduling, Background Execution, and
+future subsystems depend on a common foundation. **No user-facing features;
+application behavior is identical.**
 
 ### Changed
 
@@ -295,7 +299,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.5
 [0.5.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.0
 [0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
 [0.4.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.0

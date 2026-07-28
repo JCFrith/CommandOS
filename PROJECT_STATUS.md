@@ -1,17 +1,17 @@
 # PROJECT_STATUS
 
-_Last updated on the `sprint-5.5-platform-runtime` branch (not merged, not tagged)._
+_Last updated at the Sprint 5.5 — Platform Runtime release (`v0.5.5`)._
 
 ## Current Sprint
 
-**Sprint 5.5 — Platform Runtime** 🚧 architectural refactor on
-`sprint-5.5-platform-runtime` (not merged, not tagged). Promotes the reusable,
-AI-agnostic runtime primitives (retry, cancellation, ids, correlation, the
-execution status machine + context + events, and the background/queue/worker/
-scheduler/job-store contracts) out of `lib/ai/runtime` into a shared
-`lib/platform`. Dependency direction is enforced `Feature → Platform → AI
-(optional)`; the AI `ExecutionRuntime` now consumes the platform. **No
-user-facing features; behavior is identical** (see `docs/platform-runtime.md`).
+**Sprint 5.5 — Platform Runtime** ✅ complete — reviewed, merged to `main`, tagged
+`v0.5.5`. Promotes the reusable, AI-agnostic runtime primitives (retry,
+cancellation, ids, correlation, the execution status machine + context + events,
+and the background/queue/worker/scheduler/job-store contracts) out of
+`lib/ai/runtime` into a shared `lib/platform`. Dependency direction is enforced
+`Feature → Platform → AI (optional)`; the AI `ExecutionRuntime` now consumes the
+platform. **No user-facing features; behavior is identical** (see
+`docs/platform-runtime.md`).
 
 **Sprint 5 — Signals & Observability Platform** ✅ complete — reviewed, merged to
 `main`, tagged `v0.5.0`. The platform-wide event and observability system: every
