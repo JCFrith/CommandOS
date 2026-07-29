@@ -1,5 +1,7 @@
 import type { Execution, ExecutionEvent, ExecutionStatus } from './execution';
 import type { TokenUsage, CostEstimate } from './accounting';
+import type * as EnvMod from '@/lib/env';
+import type * as SupaLoggerMod from '@/services/ai/supabase-execution-logger';
 
 /**
  * Execution logging — a durable, auditable record of every run.
@@ -90,7 +92,22 @@ const globalForLogger = globalThis as typeof globalThis & {
 };
 
 /** The active execution logger (dev in-memory; swap for Supabase later). */
+/* eslint-disable @typescript-eslint/no-require-imports */
+function buildExecutionLogger(): ExecutionLogger {
+  try {
+    const env = require('@/lib/env') as typeof EnvMod;
+    if (env.isSupabasePersistenceEnabled()) {
+      const mod = require('@/services/ai/supabase-execution-logger') as typeof SupaLoggerMod;
+      return new mod.SupabaseExecutionLogger();
+    }
+  } catch {
+    /* fall through */
+  }
+  return new InMemoryExecutionLogger();
+}
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 export const executionLogger: ExecutionLogger =
-  globalForLogger.__executionLogger ?? new InMemoryExecutionLogger();
+  globalForLogger.__executionLogger ?? buildExecutionLogger();
 
 globalForLogger.__executionLogger = executionLogger;

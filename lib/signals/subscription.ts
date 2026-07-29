@@ -57,3 +57,16 @@ export function routeToSubscriptions(
 ): SignalSubscription[] {
   return subscriptions.filter((s) => matchesSubscription(s, signal));
 }
+
+/**
+ * Persistence boundary for {@link SignalSubscription}s. A durable notification
+ * system consumes these; the interface is the stable contract for the Supabase
+ * adapter (in-memory today). Workspace-scoped reads (`null` = platform-level).
+ */
+export interface SignalSubscriptionRepository {
+  create(subscription: SignalSubscription): Promise<SignalSubscription>;
+  get(id: string): Promise<SignalSubscription | null>;
+  /** Active subscriptions for a workspace (plus platform-level `null`-scoped). */
+  listActive(workspaceId: string): Promise<SignalSubscription[]>;
+  setActive(id: string, active: boolean): Promise<void>;
+}

@@ -1,5 +1,7 @@
 import type { Agent, AgentActivity, AgentExecution } from '@/types';
 import type { AgentRepository } from './agent-repository';
+import type * as EnvMod from '@/lib/env';
+import type * as SupaAgentMod from '@/services/agents/supabase-agent-repository';
 
 /**
  * DEVELOPMENT-ONLY {@link AgentRepository}.
@@ -103,7 +105,22 @@ const globalForAgents = globalThis as typeof globalThis & {
   __agentRepository?: AgentRepository;
 };
 
+/* eslint-disable @typescript-eslint/no-require-imports */
+function buildAgentRepository(): AgentRepository {
+  try {
+    const env = require('@/lib/env') as typeof EnvMod;
+    if (env.isSupabasePersistenceEnabled()) {
+      const mod = require('@/services/agents/supabase-agent-repository') as typeof SupaAgentMod;
+      return new mod.SupabaseAgentRepository();
+    }
+  } catch {
+    /* fall through */
+  }
+  return new InMemoryAgentRepository();
+}
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 export const agentRepository: AgentRepository =
-  globalForAgents.__agentRepository ?? new InMemoryAgentRepository();
+  globalForAgents.__agentRepository ?? buildAgentRepository();
 
 globalForAgents.__agentRepository = agentRepository;

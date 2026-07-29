@@ -86,6 +86,20 @@ create table if not exists operations (
 );
 create index if not exists idx_operations_ws on operations (workspace_id, updated_at desc);
 
+create table if not exists operation_activity (       -- append-only timeline
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  operation_id uuid not null references operations(id) on delete cascade,
+  actor_id uuid not null,
+  actor_name text not null,
+  type text not null,
+  message text not null,
+  from_status text,
+  to_status text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_op_activity on operation_activity (workspace_id, operation_id, created_at, id);
+
 -- ============================================================================
 -- Agents + executions
 -- ============================================================================
@@ -123,6 +137,20 @@ create table if not exists agent_executions (
   completed_at timestamptz
 );
 create index if not exists idx_agent_exec on agent_executions (workspace_id, agent_id, created_at desc);
+
+create table if not exists agent_activity (           -- append-only timeline
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  agent_id uuid not null references agents(id) on delete cascade,
+  actor_id uuid not null,
+  actor_name text not null,
+  type text not null,
+  message text not null,
+  from_status text,
+  to_status text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_agent_activity on agent_activity (workspace_id, agent_id, created_at, id);
 -- One active execution per agent (mirrors the duplicate-run guard).
 create unique index if not exists uq_agent_active_exec
   on agent_executions (workspace_id, agent_id)
@@ -385,7 +413,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['signals','signal_events','workflow_step_runs','execution_logs','trigger_claims','schedule_occurrences']
+  foreach t in array array['signals','signal_events','workflow_step_runs','execution_logs','trigger_claims','schedule_occurrences','operation_activity','agent_activity']
   loop
     execute format('drop trigger if exists trg_append_only on %I', t);
     execute format('create trigger trg_append_only before update or delete on %I for each row execute function app_forbid_mutation()', t);
@@ -418,7 +446,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'operations','agents','agent_executions','execution_logs',
+    'operations','operation_activity','agents','agent_activity','agent_executions','execution_logs',
     'workflows','workflow_versions','workflow_runs','workflow_step_runs','workflow_approvals',
     'workflow_timers','signals','signal_events'
   ]

@@ -37,14 +37,13 @@ const globalForSignals = globalThis as typeof globalThis & {
   __signalPersistenceWired?: boolean;
 };
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 function buildSignalStore(): SignalEventStore {
   // Production Postgres store only when persistence is explicitly enabled; the
   // server-only adapter is lazy-required so the dev/client path never pulls it in.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const env = require('@/lib/env') as typeof EnvModule;
     if (env.isSupabasePersistenceEnabled()) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod =
         require('@/services/signals/supabase-signal-event-store') as typeof SupabaseSignalStoreModule;
       return new mod.SupabaseSignalEventStore();
@@ -54,6 +53,7 @@ function buildSignalStore(): SignalEventStore {
   }
   return new InMemorySignalEventStore();
 }
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 export const signalEventStore: SignalEventStore =
   globalForSignals.__signalEventStore ?? buildSignalStore();

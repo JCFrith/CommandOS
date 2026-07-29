@@ -7,6 +7,8 @@ import type {
   TriggerClaim,
 } from '@/lib/workflows/types';
 import type { WorkflowRepository } from './workflow-repository';
+import type * as EnvMod from '@/lib/env';
+import type * as SupaWfMod from '@/services/workflows/supabase-workflow-repository';
 
 /**
  * DEVELOPMENT-ONLY in-memory {@link WorkflowRepository}.
@@ -143,7 +145,22 @@ const globalForWorkflows = globalThis as typeof globalThis & {
   __workflowRepository?: WorkflowRepository;
 };
 
+/* eslint-disable @typescript-eslint/no-require-imports */
+function buildWorkflowRepository(): WorkflowRepository {
+  try {
+    const env = require('@/lib/env') as typeof EnvMod;
+    if (env.isSupabasePersistenceEnabled()) {
+      const mod = require('@/services/workflows/supabase-workflow-repository') as typeof SupaWfMod;
+      return new mod.SupabaseWorkflowRepository();
+    }
+  } catch {
+    /* fall through */
+  }
+  return new InMemoryWorkflowRepository();
+}
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 export const workflowRepository: WorkflowRepository =
-  globalForWorkflows.__workflowRepository ?? new InMemoryWorkflowRepository();
+  globalForWorkflows.__workflowRepository ?? buildWorkflowRepository();
 
 globalForWorkflows.__workflowRepository = workflowRepository;
