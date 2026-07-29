@@ -57,6 +57,13 @@ export interface ExecutionContext {
   subjectType?: string;
   /** The correlation id for the chain this work belongs to. */
   correlationId?: string;
+  /**
+   * Optional id of the event/step that CAUSED this work (the parent within the
+   * chain), so nested activity stays distinguishable. Set by trusted server-side
+   * callers when an execution is triggered by an upstream step (e.g. a workflow
+   * node); the runtime tags its Signals as children of it.
+   */
+  causationId?: string;
 }
 
 export type ExecutionEventType =

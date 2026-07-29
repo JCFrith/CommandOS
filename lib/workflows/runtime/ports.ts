@@ -27,6 +27,19 @@ export interface AgentStepResult {
 }
 
 /**
+ * The trusted correlation reference the runtime hands to `runAgent`, so the
+ * nested agent run inherits the WorkflowRun's correlation chain. Server-side
+ * only — derived from the run + node, never from operator input.
+ */
+export interface AgentCorrelationRef {
+  correlationId: string;
+  workspaceId: string;
+  workflowRunId: string;
+  workflowStepRunId: string;
+  initiatingActorId: string;
+}
+
+/**
  * Actions a workflow can take on other subsystems. Each is authorized + executed
  * by the real service behind the adapter (so RBAC + workspace scoping are
  * enforced there), and receives the run's {@link WorkflowRunContext} (carrying
@@ -35,7 +48,7 @@ export interface AgentStepResult {
 export interface WorkflowCapabilities {
   runAgent(
     ctx: WorkflowRunContext,
-    input: { agentId: string; input: string },
+    input: { agentId: string; input: string; correlation: AgentCorrelationRef },
   ): Promise<AgentStepResult>;
   createOperation(
     ctx: WorkflowRunContext,

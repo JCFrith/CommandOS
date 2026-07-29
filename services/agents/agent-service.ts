@@ -65,6 +65,35 @@ const defaultDeps: ServiceDeps = {
 };
 
 /**
+ * A TRUSTED, server-side correlation context an upstream orchestrator (e.g. the
+ * WorkflowRuntime capability adapter) may supply so a nested agent run — and all
+ * its downstream AI-runtime Signals — inherit the caller's correlation chain
+ * instead of minting a new root.
+ *
+ * This is NEVER derived from client input: only trusted server-side callers pass
+ * it, and {@link AgentService.execute} adopts it only after validating that its
+ * `workspaceId` matches the caller's workspace (a foreign context is ignored, and
+ * a fresh root chain is minted instead). A client can therefore never select or
+ * inject a correlation id.
+ */
+export interface TrustedCorrelationContext {
+  correlationId: string;
+  /** Must equal the caller's workspace, else the context is ignored. */
+  workspaceId: string;
+  /** The upstream event/step that caused this run (parent within the chain). */
+  causationId?: string;
+  workflowRunId?: string;
+  workflowStepRunId?: string;
+  /** The automation/service identity initiating the run (audit). */
+  initiatingActorId?: string;
+}
+
+/** Options for {@link AgentService.execute} (all server-side; none from client). */
+export interface AgentExecuteOptions {
+  correlation?: TrustedCorrelationContext;
+}
+
+/**
  * Agents use cases. Owns validation (Zod), authorization (RBAC + ownership),
  * lifecycle enforcement (the state machine), workspace scoping, and activity
  * recording. AI execution mechanics (provider call, retry, timeout, accounting,
@@ -239,7 +268,12 @@ export class AgentService {
    * timeout, accounting, structured-output validation, and logging) and maps the
    * runtime {@link Execution} onto the persisted {@link AgentExecution}.
    */
-  async execute(ctx: AgentContext, id: string, input: unknown): Promise<AgentExecution> {
+  async execute(
+    ctx: AgentContext,
+    id: string,
+    input: unknown,
+    options: AgentExecuteOptions = {},
+  ): Promise<AgentExecution> {
     const agent = await this.get(ctx, id);
     if (!canManageAgent(ctx.user, ctx.workspace, agent)) {
       await this.deny(ctx, agent.id, 'run agent', 'You do not have permission to run this agent.');
@@ -255,21 +289,37 @@ export class AgentService {
       await this.deny(ctx, agent.id, 'run agent', 'You do not have permission to run this agent.');
     }
 
-    // Mint the correlation id at the head of the run chain — the agent run, the
-    // runtime, the provider call, retries, and completion all share it.
-    const correlationId = this.deps.id();
+    // Correlation: inherit a TRUSTED upstream chain when supplied AND its
+    // workspace matches (else a foreign context is ignored and a fresh root is
+    // minted). A client can never inject a correlation id — only server-side
+    // callers (e.g. the WorkflowRuntime adapter) pass `options.correlation`.
+    const inherited =
+      options.correlation && options.correlation.workspaceId === ctx.workspace.id
+        ? options.correlation
+        : undefined;
+    const correlationId = inherited?.correlationId ?? this.deps.id();
+    const headParentId = inherited?.workflowStepRunId ?? inherited?.workflowRunId ?? null;
+    const headCorrelation = inherited
+      ? continueChain(correlationId, headParentId)
+      : rootCorrelation(correlationId);
+    const chainRefs: Record<string, string> = inherited
+      ? {
+          workflowRunId: inherited.workflowRunId ?? '',
+          workflowStepRunId: inherited.workflowStepRunId ?? '',
+        }
+      : {};
 
     if (!this.runtime.isAvailable()) {
       await this.emit({
         type: 'provider.unavailable',
         workspaceId: ctx.workspace.id,
-        correlation: rootCorrelation(correlationId),
+        correlation: headCorrelation,
         actorId: ctx.user.id,
         actorName: ctx.user.displayName,
         summary: 'AI execution unavailable — no model provider is configured.',
         subjectType: 'agent',
         subjectId: agent.id,
-        payload: { agentId: agent.id },
+        payload: { agentId: agent.id, ...chainRefs },
       });
       throw new AgentError(
         'unavailable',
@@ -304,13 +354,13 @@ export class AgentService {
     const started = await this.emit({
       type: 'agent.execution.started',
       workspaceId: ctx.workspace.id,
-      correlation: rootCorrelation(correlationId),
+      correlation: headCorrelation,
       actorId: ctx.user.id,
       actorName: ctx.user.displayName,
       summary: `started a run of "${agent.name}"`,
       subjectType: 'agent',
       subjectId: agent.id,
-      payload: { executionId: execution.id, agentType: agent.type },
+      payload: { executionId: execution.id, agentType: agent.type, ...chainRefs },
     });
 
     const request = buildAgentExecutionRequest(
@@ -323,6 +373,9 @@ export class AgentService {
         subjectId: agent.id,
         subjectType: 'agent',
         correlationId,
+        // Downstream AI-runtime Signals become children of the agent's started
+        // Signal (or, when inherited, the workflow step), keeping the chain intact.
+        causationId: started?.id ?? headParentId ?? undefined,
       },
       this.deps.id(),
     );

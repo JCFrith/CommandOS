@@ -76,6 +76,15 @@ The runtime emits `workflow.run.started/suspended/resumed/completed/failed/
 cancelled/timed_out`, `workflow.node.completed/failed`, `workflow.branch.taken`,
 and `workflow.approval.requested`, each tagged with the run's `correlationId`
 (subject = the run). The Timeline Engine reconstructs the run's history from these
-— no separate history system. Agent/operation sub-executions retain their own
-correlation chains (linked by subject + time); threading the run correlation into
-those sub-executions is a documented enhancement (TD-33).
+— no separate history system.
+
+**Nested correlation:** when an `agent_run` node executes, the runtime hands the
+capability adapter a trusted correlation reference (run correlation id + run/step
+ids + workspace + initiating actor); the adapter passes it to
+`AgentService.execute` as a server-side `correlation` option. The agent execution
+and **all downstream AI-runtime signals inherit the WorkflowRun correlation id**
+(with `causationId` preserving parent depth), so an entire flow — workflow run →
+agent execution → provider call → retry → completion — is one chain. A standalone
+agent run still mints a fresh root; a foreign-workspace or client-supplied
+correlation is ignored (validated against the caller's workspace). Owner-scoped
+identity for triggered runs remains open debt (TD-33).

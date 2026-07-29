@@ -258,8 +258,16 @@ export class WorkflowService {
 
   // --- runs -----------------------------------------------------------------
 
-  /** Start a run manually (authorized operator). */
-  async start(ctx: WorkflowContext, id: string, input: unknown = {}): Promise<WorkflowRun> {
+  /**
+   * Start a run manually (authorized operator). An optional `idempotencyKey`
+   * (server-side) deduplicates repeated submissions of the same intent.
+   */
+  async start(
+    ctx: WorkflowContext,
+    id: string,
+    input: unknown = {},
+    idempotencyKey?: string,
+  ): Promise<WorkflowRun> {
     const workflow = await this.get(ctx, id);
     if (!canRunWorkflow(ctx.workspace)) {
       throw new WorkflowError('forbidden', 'You do not have permission to run this workflow.');
@@ -275,7 +283,13 @@ export class WorkflowService {
 
     const { input: runInput } = this.parse(startRunSchema, { input });
     const runCtx = this.runContext(ctx.workspace.id, ctx.user);
-    return this.execute(version, runCtx, { type: 'manual', ref: ctx.user.id }, runInput ?? {});
+    return this.execute(
+      version,
+      runCtx,
+      { type: 'manual', ref: ctx.user.id },
+      runInput ?? {},
+      idempotencyKey,
+    );
   }
 
   /** Cancel a run in progress (or suspended). */
@@ -375,20 +389,67 @@ export class WorkflowService {
     await this.execute(version, runCtx, trigger, {});
   }
 
+  /**
+   * A stable, server-derived key for one trigger OCCURRENCE (or `null` when a
+   * manual run supplies no idempotency key — each is then distinct). Derived only
+   * from trusted server-side data: workspace, version, trigger type, and the
+   * occurrence id (source signal id / schedule tick / manual idempotency key).
+   */
+  private triggerKey(
+    workspaceId: string,
+    versionId: string,
+    trigger: WorkflowRunTrigger,
+    idempotencyKey?: string,
+  ): string | null {
+    if (trigger.type === 'signal' && trigger.ref) {
+      return `${workspaceId}:${versionId}:signal:${trigger.ref}`;
+    }
+    if (trigger.type === 'schedule' && trigger.ref) {
+      return `${workspaceId}:${versionId}:schedule:${trigger.ref}`;
+    }
+    if (trigger.type === 'manual' && idempotencyKey) {
+      return `${workspaceId}:${versionId}:manual:${idempotencyKey}`;
+    }
+    return null;
+  }
+
   private async execute(
     version: WorkflowVersion,
     runCtx: WorkflowRunContext,
     trigger: WorkflowRunTrigger,
     input: Record<string, unknown>,
+    idempotencyKey?: string,
   ): Promise<WorkflowRun> {
+    const runId = this.deps.id();
+    const key = this.triggerKey(version.workspaceId, version.id, trigger, idempotencyKey);
+
+    // Deduplicate at-least-once trigger delivery: two runs are never created for
+    // the same occurrence. The claim is atomic (maps to a DB unique constraint).
+    if (key) {
+      const claim = await this.repo.claimTrigger({
+        workspaceId: version.workspaceId,
+        triggerKey: key,
+        runId,
+        createdAt: this.deps.now(),
+      });
+      if (!claim.claimed) {
+        const existing = claim.existingRunId
+          ? await this.repo.getRun(version.workspaceId, claim.existingRunId)
+          : null;
+        if (existing) return existing;
+        throw new WorkflowError('conflict', 'This trigger occurrence has already been processed.');
+      }
+    }
+
     const run: WorkflowRun = {
-      id: this.deps.id(),
+      id: runId,
       workflowId: version.workflowId,
       versionId: version.id,
       workspaceId: version.workspaceId,
       correlationId: runCtx.correlationId ?? this.deps.id(),
       status: 'pending',
       trigger,
+      triggerKey: key,
       variables: seedVariables(version.variables, input),
       frontier: [],
       joinArrivals: {},

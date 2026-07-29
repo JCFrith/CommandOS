@@ -49,6 +49,7 @@ export function seedVariables(
 ): WorkflowVariables {
   const vars: WorkflowVariables = {};
   for (const decl of declarations) {
+    if (!isSafeVariableKey(decl.key)) continue; // prototype-pollution guard
     const provided = decl.key in input ? toWorkflowValue(input[decl.key]) : undefined;
     const value = provided ?? decl.default ?? null;
     vars[decl.key] = coerceToType(toWorkflowValue(value), decl.type);
@@ -56,12 +57,26 @@ export function seedVariables(
   return vars;
 }
 
-/** Set a variable (returns a new store — the caller checkpoints it). */
+/** Keys that could pollute the prototype chain — never admitted to the store. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/** Whether a variable key is safe to store (defense against prototype pollution). */
+export function isSafeVariableKey(key: string): boolean {
+  return !UNSAFE_KEYS.has(key);
+}
+
+/**
+ * Set a variable (returns a new store — the caller checkpoints it). Dangerous
+ * keys (`__proto__`/`constructor`/`prototype`) are ignored so the flat store can
+ * never be used to pollute a prototype. (Object spread + computed keys are
+ * already safe, but this is belt-and-suspenders.)
+ */
 export function setVariable(
   vars: WorkflowVariables,
   key: string,
   value: unknown,
 ): WorkflowVariables {
+  if (!isSafeVariableKey(key)) return vars;
   return { ...vars, [key]: toWorkflowValue(value) };
 }
 

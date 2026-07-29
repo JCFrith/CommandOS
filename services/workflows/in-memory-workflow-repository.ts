@@ -4,6 +4,7 @@ import type {
   WorkflowRun,
   WorkflowStepRun,
   WorkflowVersion,
+  TriggerClaim,
 } from '@/lib/workflows/types';
 import type { WorkflowRepository } from './workflow-repository';
 
@@ -22,6 +23,8 @@ export class InMemoryWorkflowRepository implements WorkflowRepository {
   private readonly runs = new Map<string, WorkflowRun>();
   private readonly steps: WorkflowStepRun[] = [];
   private readonly approvals = new Map<string, WorkflowApproval>();
+  /** Idempotency records keyed by `${workspaceId}:${triggerKey}` → runId. */
+  private readonly triggerClaims = new Map<string, string>();
 
   private static clone<T>(v: T): T {
     return structuredClone(v);
@@ -81,6 +84,17 @@ export class InMemoryWorkflowRepository implements WorkflowRepository {
       .filter((r) => r.workspaceId === workspaceId && r.workflowId === workflowId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((r) => InMemoryWorkflowRepository.clone(r));
+  }
+
+  async claimTrigger(
+    claim: TriggerClaim,
+  ): Promise<{ claimed: boolean; existingRunId: string | null }> {
+    const key = `${claim.workspaceId}:${claim.triggerKey}`;
+    const existing = this.triggerClaims.get(key);
+    if (existing !== undefined) return { claimed: false, existingRunId: existing };
+    // Atomic check-and-set in a single JS realm (maps to a DB unique constraint).
+    this.triggerClaims.set(key, claim.runId);
+    return { claimed: true, existingRunId: null };
   }
 
   async appendStep(step: WorkflowStepRun): Promise<void> {

@@ -37,9 +37,25 @@ function toWorkspaceContext(ctx: WorkflowRunContext): WorkspaceContext {
 }
 
 export const workflowCapabilities: WorkflowCapabilities = {
-  async runAgent(ctx, { agentId, input }): Promise<AgentStepResult> {
+  async runAgent(ctx, { agentId, input, correlation }): Promise<AgentStepResult> {
     try {
-      const execution = await agentService.execute(toWorkspaceContext(ctx), agentId, { input });
+      // Pass the run's correlation as a TRUSTED, server-side context so the
+      // nested agent run + its AI-runtime Signals join the workflow chain.
+      const execution = await agentService.execute(
+        toWorkspaceContext(ctx),
+        agentId,
+        { input },
+        {
+          correlation: {
+            correlationId: correlation.correlationId,
+            workspaceId: correlation.workspaceId,
+            workflowRunId: correlation.workflowRunId,
+            workflowStepRunId: correlation.workflowStepRunId,
+            causationId: correlation.workflowStepRunId,
+            initiatingActorId: correlation.initiatingActorId,
+          },
+        },
+      );
       if (execution.status === 'completed' && execution.result) {
         return {
           ok: true,

@@ -74,6 +74,14 @@ describe('variable engine', () => {
     expect(setVariable({}, 'k', 42).k).toBe(42);
     expect(typeof toWorkflowValue({ nested: true })).toBe('string'); // structured → bounded string
   });
+  it('ignores prototype-pollution keys', () => {
+    const out = setVariable({ ok: 1 }, '__proto__', { polluted: true });
+    expect(Object.keys(out)).toEqual(['ok']);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(
+      seedVariables([{ key: 'constructor', type: 'string', required: false, default: 'x' }]),
+    ).toEqual({});
+  });
 });
 
 describe('definition validation', () => {

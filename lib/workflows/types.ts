@@ -167,6 +167,19 @@ export interface WorkflowRunTrigger {
   ref: string | null;
 }
 
+/**
+ * A stable, server-derived identity for one trigger OCCURRENCE, used to
+ * deduplicate at-least-once delivery: two runs are never created for the same
+ * `(workspace, version, trigger, occurrence)`. Persisted as an idempotency
+ * record so the abstraction maps onto a future DB unique constraint.
+ */
+export interface TriggerClaim {
+  workspaceId: string;
+  triggerKey: string;
+  runId: string;
+  createdAt: string;
+}
+
 /** One execution of a pinned workflow version. */
 export interface WorkflowRun {
   id: string;
@@ -176,6 +189,8 @@ export interface WorkflowRun {
   correlationId: string;
   status: WorkflowRunStatus;
   trigger: WorkflowRunTrigger;
+  /** The dedup identity of the trigger occurrence, if any (`null` = undeduped). */
+  triggerKey: string | null;
   /** The current variable context (a snapshot; updated as steps run). */
   variables: WorkflowVariables;
   /** Nodes ready to execute next (the run frontier) — enables resume. */

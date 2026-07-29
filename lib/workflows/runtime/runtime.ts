@@ -344,8 +344,17 @@ export class WorkflowRuntime {
         const agentId = node.config.agentId;
         const input = interpolate(node.config.inputTemplate, vars);
         const outputVar = node.config.outputVar;
+        // Hand the agent the run's correlation chain so its execution + all
+        // downstream AI-runtime Signals inherit the WorkflowRun correlation id.
+        const correlation = {
+          correlationId: run.correlationId,
+          workspaceId: run.workspaceId,
+          workflowRunId: run.id,
+          workflowStepRunId: node.id,
+          initiatingActorId: run.startedBy,
+        };
         return this.withPolicies(node, () =>
-          this.deps.capabilities.runAgent(ctx, { agentId, input }),
+          this.deps.capabilities.runAgent(ctx, { agentId, input, correlation }),
         ).then((r): NodeOutcome => {
           if (r.timedOut)
             return { kind: 'fail', error: 'The agent step timed out.', timedOut: true };

@@ -67,6 +67,7 @@ function newRun(vars: Record<string, string | number | boolean | null> = {}): Wo
     correlationId: 'corr-1',
     status: 'pending',
     trigger: { type: 'manual', ref: 'u-1' },
+    triggerKey: null,
     variables: vars,
     frontier: [],
     joinArrivals: {},
