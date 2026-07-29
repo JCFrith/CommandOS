@@ -1,17 +1,19 @@
 # PROJECT_STATUS
 
-_Last updated on the `sprint-6-workflows` branch (not merged, not tagged)._
+_Last updated at the Sprint 6 — Workflows & Automation release (`v0.6.0`)._
 
 ## Current Sprint
 
-**Sprint 6 — Workflows & Automation Platform** 🚧 implemented on
-`sprint-6-workflows` (not merged, not tagged). Declarative, versioned automation
-graphs (`WorkflowRuntime`) that orchestrate Operations, Agents, the AI runtime,
-and Signals — triggered by signals/schedules/manually, with conditions,
-branching, parallel+join, delays, approvals, retries, timeouts, cancellation, and
-**resumability** via per-node checkpoints. The runtime consumes only the Platform
-Runtime + injected ports (never `lib/ai`); run history is reconstructed from
-Signals (see `docs/workflows.md`, `docs/workflow-runtime.md`).
+**Sprint 6 — Workflows & Automation Platform** ✅ complete — reviewed, merged to
+`main`, tagged `v0.6.0`. Declarative, versioned automation graphs
+(`WorkflowRuntime`) that orchestrate Operations, Agents, the AI runtime, and
+Signals — triggered by signals/schedules/manually, with conditions, branching,
+parallel+join, delays, approvals, retries, timeouts, cancellation, and
+**resumability** via per-node checkpoints. **Nested correlation** (workflow →
+agent → AI runtime share one correlation id) and **at-least-once trigger
+deduplication** are in place. The runtime consumes only the Platform Runtime +
+injected ports (never `lib/ai`); run history is reconstructed from Signals (see
+`docs/workflows.md`, `docs/workflow-runtime.md`).
 
 **Sprint 5.5 — Platform Runtime** ✅ complete — merged to `main`, tagged
 `v0.5.5`. Promotes the reusable, AI-agnostic runtime primitives (retry,
@@ -206,7 +208,7 @@ unavailable) — all pass.
 
 | Suite            | Result                                                     |
 | ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 233 passing across 43 files (21 net-new for Workflows)  |
+| Unit (Vitest)    | ✅ 244 passing across 45 files (31 net-new for Workflows)  |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
 
 Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired

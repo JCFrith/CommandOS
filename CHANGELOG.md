@@ -9,10 +9,13 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 6 — **Workflows & Automation Platform** (on `sprint-6-workflows`; not
-merged, not tagged). Declarative, versioned automation graphs that orchestrate
-Operations, Agents, the AI runtime, and Signals — built on the completed platform
-foundation.
+_Nothing yet._
+
+## [0.6.0] — 2026-07-29
+
+Sprint 6 — **Workflows & Automation Platform**. Declarative, versioned automation
+graphs that orchestrate Operations, Agents, the AI runtime, and Signals — built on
+the completed platform foundation.
 
 ### Added
 
@@ -48,10 +51,21 @@ foundation.
   orchestration / retry / failure — service, signal + scheduled trigger
   integration, signal-derived history + correlation, command registration).
 
+- **Nested correlation** (D-607): `AgentService.execute` accepts an optional
+  trusted, server-side `correlation` context; a workflow-triggered agent run and
+  all downstream AI-runtime signals inherit the WorkflowRun correlation id (a
+  standalone run still mints a fresh root; client injection is impossible;
+  `ExecutionContext.causationId` preserves parent depth).
+- **At-least-once trigger deduplication** (D-608): a stable server-derived trigger
+  key + an atomic `WorkflowRepository.claimTrigger` prevent duplicate runs for the
+  same signal/schedule/manual occurrence (durable-constraint-compatible); resume
+  and approval decisions are idempotent.
+
 ### Changed
 
 - Added a `workflows` Signal source + catalog entries; the empty `system` command
-  group and nav gain workflow entries.
+  group and nav gain workflow entries. Added a prototype-pollution guard on
+  workflow variable keys.
 
 ## [0.5.5] — 2026-07-27
 
@@ -341,7 +355,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.6.0
 [0.5.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.5
 [0.5.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.0
 [0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
