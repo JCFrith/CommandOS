@@ -36,6 +36,35 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
+ * Whether the production Supabase persistence path is enabled. Requires Supabase
+ * to be configured, the service-role key to be present, AND an explicit opt-in
+ * flag — so `next dev`, tests, and unconfigured environments keep using the
+ * development in-memory stores with identical behavior (Sprint 6.5 is an
+ * infrastructure swap, not a behavior change). The worker also uses this gate.
+ */
+export function isSupabasePersistenceEnabled(): boolean {
+  return (
+    isSupabaseConfigured() &&
+    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) &&
+    process.env.USE_SUPABASE_PERSISTENCE === '1'
+  );
+}
+
+/**
+ * The service-role Supabase config (URL + service key). Bypasses RLS — SERVER +
+ * WORKER ONLY, never exposed to the client. Throws if the persistence path is
+ * not fully configured (callers gate on {@link isSupabasePersistenceEnabled}).
+ */
+export function supabaseServiceConfig(): { url: string; serviceKey: string } {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error('Supabase service persistence is not configured (URL / service-role key).');
+  }
+  return { url, serviceKey };
+}
+
+/**
  * Non-throwing check for whether OpenAI credentials are present. AI execution is
  * gated on this so the app builds and runs without an API key configured, and
  * surfaces an honest "unavailable" state instead of fabricating output.

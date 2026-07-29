@@ -82,4 +82,44 @@ describe('computeHealth', () => {
     expect(worstStatus(['healthy', 'unavailable'])).toBe('unavailable');
     expect(worstStatus([])).toBe('unknown');
   });
+
+  it('omits infra subsystems when no infra facts are provided (dev default)', () => {
+    const health = computeHealth(inputs({}));
+    expect(health.subsystems.map((s) => s.subsystem)).toEqual([
+      'provider',
+      'runtime',
+      'signal-bus',
+    ]);
+  });
+
+  it('adds database/queue/worker subsystems when the durable path is wired', () => {
+    const health = computeHealth({
+      ...inputs({}),
+      infra: {
+        persistenceEnabled: true,
+        databaseReachable: true,
+        queue: { queued: 3, running: 1, failed: 0, oldestQueuedMs: 1000, expiredLeases: 0 },
+        workerHeartbeatAgeMs: 30_000,
+      },
+    });
+    const names = health.subsystems.map((s) => s.subsystem);
+    expect(names).toContain('database');
+    expect(names).toContain('queue');
+    expect(names).toContain('worker');
+    expect(health.subsystems.find((s) => s.subsystem === 'worker')!.status).toBe('healthy');
+    expect(health.subsystems.find((s) => s.subsystem === 'queue')!.status).toBe('healthy');
+  });
+
+  it('queue warns on expired leases; worker degrades on a stale heartbeat', () => {
+    const health = computeHealth({
+      ...inputs({}),
+      infra: {
+        persistenceEnabled: true,
+        queue: { queued: 0, running: 2, failed: 0, oldestQueuedMs: null, expiredLeases: 2 },
+        workerHeartbeatAgeMs: 400_000,
+      },
+    });
+    expect(health.subsystems.find((s) => s.subsystem === 'queue')!.status).toBe('warning');
+    expect(health.subsystems.find((s) => s.subsystem === 'worker')!.status).toBe('degraded');
+  });
 });

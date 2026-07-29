@@ -1,6 +1,10 @@
 import { InProcessSignalBus, type SignalBus, type SignalPublisher } from './bus';
 import { InMemorySignalEventStore, type SignalEventStore } from './store';
 import { emittedEvent } from './signal';
+// Type-only imports (erased): keep the server-only Supabase store out of the dev
+// bundle while typing the lazy `require` below.
+import type * as EnvModule from '@/lib/env';
+import type * as SupabaseSignalStoreModule from '@/services/signals/supabase-signal-event-store';
 
 /**
  * The wired Signal platform singletons.
@@ -33,8 +37,26 @@ const globalForSignals = globalThis as typeof globalThis & {
   __signalPersistenceWired?: boolean;
 };
 
+function buildSignalStore(): SignalEventStore {
+  // Production Postgres store only when persistence is explicitly enabled; the
+  // server-only adapter is lazy-required so the dev/client path never pulls it in.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const env = require('@/lib/env') as typeof EnvModule;
+    if (env.isSupabasePersistenceEnabled()) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod =
+        require('@/services/signals/supabase-signal-event-store') as typeof SupabaseSignalStoreModule;
+      return new mod.SupabaseSignalEventStore();
+    }
+  } catch {
+    /* fall through to the dev store */
+  }
+  return new InMemorySignalEventStore();
+}
+
 export const signalEventStore: SignalEventStore =
-  globalForSignals.__signalEventStore ?? new InMemorySignalEventStore();
+  globalForSignals.__signalEventStore ?? buildSignalStore();
 globalForSignals.__signalEventStore = signalEventStore;
 
 export const signalBus: SignalBus = globalForSignals.__signalBus ?? new InProcessSignalBus();
