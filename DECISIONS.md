@@ -365,6 +365,111 @@ re-exports platform retry/cancellation for convenience; and
 `@/lib/signals/correlation` re-exports the generic chain constructors. Existing
 import paths keep working, so the refactor is behavior- and contract-preserving.
 
+## Sprint 6 — Workflows & Automation (2026-07-27)
+
+Build the workflow platform on the completed foundation. Full design in
+`docs/workflows.md` and `docs/workflow-runtime.md`.
+
+### D-601 · WorkflowRuntime consumes the Platform Runtime, never AI directly
+
+`WorkflowRuntime` (`lib/workflows/runtime`) depends only on the Platform Runtime
+(retry, cancellation, correlation), Signals (emission), and injected **capability
+ports** (`WorkflowCapabilities`, `WorkflowRunSink`). Agent/operation actions are
+reached through adapters injected by the wiring layer — the runtime never imports
+`lib/ai` or feature services. It is a **peer** of the AI `ExecutionRuntime`, not a
+subclass (honors D-552).
+
+### D-602 · Workflow history is reconstructed from Signals
+
+There is no bespoke workflow-history table. `WorkflowStepRun` checkpoints exist
+for **resumability** (execution state); the human-facing audit history is the
+`workflow.*` Signal stream rendered by the Timeline Engine (subject = the run).
+This is the first domain to fully realize the D-501 "timeline from Signals"
+vision.
+
+### D-603 · Conditions are a safe structured expression, not a string language
+
+`condition`/`branch` guards use a structured `Condition` AST evaluated by
+`conditions.ts` — no `eval`, no code execution, only variable lookups + literals +
+comparisons + boolean combinators over the flat variable store. Injection-proof
+and deterministic. Variables are bounded JSON-safe primitives.
+
+### D-604 · Resumability via per-node checkpoints + frontier persistence
+
+A run persists its `frontier`, `variables`, and `joinArrivals`, and appends an
+immutable `WorkflowStepRun` per node. Suspension (`waiting_approval`/
+`waiting_timer`) returns control; `resume` re-enters the processor and skips
+completed steps by node id (idempotent). This is the seam for durable, cross-
+restart resumability once persistence lands.
+
+### D-605 · Triggered runs execute as an owner-scoped context (dev model)
+
+Signal/scheduled runs have no interactive caller, so the capability adapter
+reconstructs an owner-scoped `WorkspaceContext` from the run context (personal
+workspace, mirroring D-306). Team-workspace role fidelity for triggered runs is
+future work (TD-33). A self-trigger guard drops `source: 'workflows'` signals so a
+workflow cannot trigger itself into a cascade.
+
+### D-606 · Dev in-memory persistence behind a repository interface
+
+Workflows/versions/runs/steps/approvals run on a dev in-memory
+`WorkflowRepository` (globalThis-pinned), like every other domain (D-302). The
+runtime checkpoints through the `WorkflowRunSink` subset of that interface; the
+Supabase adapter swaps in without changing the runtime, service, or UI.
+
+### D-607 · Nested correlation via a trusted, server-side execution context (correction)
+
+`AgentService.execute` accepts an optional **trusted** `correlation` option
+(`correlationId`, `causationId`, `workflowRunId`, `workflowStepRunId`,
+`workspaceId`, initiating actor). When supplied AND its workspace matches the
+caller's, the agent run **inherits** that chain instead of minting a new root, so
+the nested agent execution and all downstream AI-runtime signals share the
+WorkflowRun correlation id (backwards-compatible: no option → fresh root, exactly
+as before). The context is **never** derived from client input — only trusted
+server-side callers (the WorkflowRuntime capability adapter) pass it; a
+foreign-workspace context is ignored, and the client request schema has no
+correlation field, so a client can never select or inject a correlation id.
+`ExecutionContext.causationId` (platform) preserves parent/child depth.
+
+### D-608 · At-least-once trigger deduplication via an atomic claim (correction)
+
+A triggered run has a stable, server-derived trigger key
+(`workspace:version:triggerType:occurrenceId`, from the source signal id /
+schedule tick / manual idempotency key). `WorkflowRepository.claimTrigger` is an
+atomic check-and-set that prevents two runs for the same occurrence; it maps onto
+a durable `INSERT … ON CONFLICT DO NOTHING` on a unique `(workspace_id,
+trigger_key)`. Resume is idempotent (completed nodes skip by node id) and a
+decided approval cannot be re-decided — so at-least-once delivery, duplicate
+resume, and duplicate approval are all safe, without relying on callback timing.
+
+## Release confirmations (2026-07-29 — v0.6.0)
+
+Confirmed by the product owner at the Sprint 6 release:
+
+- **D-601/D-602/D-603/D-604/D-606 approved** — WorkflowRuntime is a peer of the AI
+  runtime (platform + ports only, never AI/services/persistence/UI directly);
+  history is Signal-derived (checkpoints are execution state only, no parallel
+  history subsystem); conditions are a validated AST (no eval/dynamic execution);
+  resumability via immutable checkpoints + pinned versions + idempotent nodes;
+  dev in-memory persistence behind repository/sink interfaces (production
+  durability deferred to Sprint 6.5).
+- **D-605 approved as an explicit temporary limitation** — owner-scoped execution
+  is acceptable for the personal-workspace dev model; **TD-33 stays open**; the
+  architecture must not hardcode assumptions blocking future service identities,
+  delegated actors, team workspaces, or role-aware execution.
+- **Correction 1 (D-607) — nested correlation** implemented: workflow-triggered
+  agent runs + all downstream AI-runtime signals inherit the WorkflowRun
+  correlation id via a trusted server-side context; client injection impossible;
+  the nested-correlation portion of TD-33 is closed.
+- **Correction 2 (D-608) — trigger deduplication** implemented: atomic
+  `claimTrigger` prevents duplicate runs for the same trigger occurrence.
+- **Authoring boundary confirmed** — validated JSON is the current advanced
+  authoring surface; no visual builder this release (TD-32 open); the immutable
+  version format is builder-agnostic (no future migration).
+- **Release.** `sprint-6-workflows` reconciled with `main` and merged
+  **non-fast-forward** (history preserved), tagged **v0.6.0**; `v0.5.5` and all
+  earlier tags unchanged.
+
 ## Release confirmations (2026-07-27 — v0.5.5)
 
 Confirmed by the product owner at the Sprint 5.5 release:

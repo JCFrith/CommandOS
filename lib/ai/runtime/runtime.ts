@@ -85,7 +85,10 @@ export class ExecutionRuntime {
         {
           type,
           workspaceId: context.workspaceId,
-          correlation: continueChain(context.correlationId ?? requestId, null),
+          correlation: continueChain(
+            context.correlationId ?? requestId,
+            context.causationId ?? null,
+          ),
           actorId: context.operatorId,
           actorName: context.operatorName,
           summary,

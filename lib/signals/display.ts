@@ -91,6 +91,7 @@ export const SOURCE_META: Record<SignalSource, { label: string; icon: LucideIcon
   auth: { label: 'Auth', icon: KeyRound },
   authz: { label: 'Authorization', icon: ShieldAlert },
   workspace: { label: 'Workspace', icon: Workflow },
+  workflows: { label: 'Workflows', icon: Workflow },
   commands: { label: 'Commands', icon: Terminal },
   signals: { label: 'Signals', icon: Radio },
 };

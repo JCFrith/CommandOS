@@ -161,6 +161,123 @@ export const SIGNAL_CATALOG = {
     'Permission denied',
   ),
 
+  // --- Workflows (lifecycle) ---
+  'workflow.created': spec(
+    'workflow.created',
+    'workflows',
+    'lifecycle',
+    'info',
+    'Workflow created',
+  ),
+  'workflow.updated': spec(
+    'workflow.updated',
+    'workflows',
+    'lifecycle',
+    'info',
+    'Workflow updated',
+  ),
+  'workflow.activated': spec(
+    'workflow.activated',
+    'workflows',
+    'lifecycle',
+    'notice',
+    'Workflow activated',
+  ),
+  'workflow.paused': spec('workflow.paused', 'workflows', 'lifecycle', 'notice', 'Workflow paused'),
+  'workflow.archived': spec(
+    'workflow.archived',
+    'workflows',
+    'lifecycle',
+    'notice',
+    'Workflow archived',
+  ),
+
+  // --- Workflow runs (execution) ---
+  'workflow.run.started': spec(
+    'workflow.run.started',
+    'workflows',
+    'execution',
+    'info',
+    'Workflow run started',
+  ),
+  'workflow.node.completed': spec(
+    'workflow.node.completed',
+    'workflows',
+    'execution',
+    'trace',
+    'Workflow step completed',
+  ),
+  'workflow.node.failed': spec(
+    'workflow.node.failed',
+    'workflows',
+    'execution',
+    'error',
+    'Workflow step failed',
+  ),
+  'workflow.branch.taken': spec(
+    'workflow.branch.taken',
+    'workflows',
+    'execution',
+    'trace',
+    'Workflow branch taken',
+  ),
+  'workflow.approval.requested': spec(
+    'workflow.approval.requested',
+    'workflows',
+    'execution',
+    'notice',
+    'Workflow approval requested',
+  ),
+  'workflow.approval.decided': spec(
+    'workflow.approval.decided',
+    'workflows',
+    'execution',
+    'notice',
+    'Workflow approval decided',
+  ),
+  'workflow.run.suspended': spec(
+    'workflow.run.suspended',
+    'workflows',
+    'execution',
+    'trace',
+    'Workflow run suspended',
+  ),
+  'workflow.run.resumed': spec(
+    'workflow.run.resumed',
+    'workflows',
+    'execution',
+    'trace',
+    'Workflow run resumed',
+  ),
+  'workflow.run.completed': spec(
+    'workflow.run.completed',
+    'workflows',
+    'execution',
+    'notice',
+    'Workflow run completed',
+  ),
+  'workflow.run.failed': spec(
+    'workflow.run.failed',
+    'workflows',
+    'execution',
+    'error',
+    'Workflow run failed',
+  ),
+  'workflow.run.cancelled': spec(
+    'workflow.run.cancelled',
+    'workflows',
+    'execution',
+    'warning',
+    'Workflow run cancelled',
+  ),
+  'workflow.run.timed_out': spec(
+    'workflow.run.timed_out',
+    'workflows',
+    'execution',
+    'error',
+    'Workflow run timed out',
+  ),
+
   // --- Workspace (lifecycle) ---
   'workspace.changed': spec(
     'workspace.changed',

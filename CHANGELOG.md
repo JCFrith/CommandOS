@@ -11,6 +11,62 @@ this file is the terse, versioned log.
 
 _Nothing yet._
 
+## [0.6.0] — 2026-07-29
+
+Sprint 6 — **Workflows & Automation Platform**. Declarative, versioned automation
+graphs that orchestrate Operations, Agents, the AI runtime, and Signals — built on
+the completed platform foundation.
+
+### Added
+
+- **Workflow domain** (`lib/workflows`): `Workflow` (draft → active ⇄ paused →
+  archived), immutable versioned `WorkflowVersion` graphs, 13 node types
+  (`start`/`condition`/`branch`/`parallel`/`join`/`delay`/`approval`/`agent_run`/
+  `operation_create`/`operation_transition`/`emit_signal`/`set_variable`/`end`),
+  `WorkflowRun`/`WorkflowStepRun`/`WorkflowApproval`, definition + run + step state
+  machines, Zod schema + `validateGraph` referential integrity.
+- **Condition engine** — a safe, structured boolean expression (no `eval`); and a
+  **variable/execution-context engine** (typed seed, `{{var}}` interpolation,
+  bounded JSON-safe values).
+- **`WorkflowRuntime`** (`lib/workflows/runtime`): a graph orchestrator that
+  checkpoints each step, fans out/joins, suspends at approvals/delays and
+  **resumes** (idempotent by node id), with retries + timeouts + cancellation from
+  the **Platform Runtime** and correlated `workflow.*` Signals. Consumes only the
+  platform + injected capability/sink **ports** — never `lib/ai` or services
+  directly.
+- **Trigger engine**: signal-triggered (bus subscription, workspace-scoped, with a
+  self-trigger guard), scheduled (in-process registry + `runDueSchedules`), and
+  manual runs.
+- **`WorkflowService`** + dev in-memory `WorkflowRepository` (behind an interface):
+  CRUD + versioning, RBAC + workspace scoping, start/cancel/resume, approvals.
+- **Signal integration**: 17 `workflow.*` signal types; a run's **audit history is
+  reconstructed from Signals** (no bespoke history table) via the Timeline Engine.
+- **Workflow surfaces**: `/console/workflows` (list + create-from-template),
+  definition detail (versions, runs, lifecycle + run controls), run detail
+  (signal-derived timeline, step checkpoints, variables, approval/cancel controls);
+  `/api/workflows` palette feed; ⌘K + nav entries.
+- Docs: `docs/workflows.md`, `docs/workflow-runtime.md`. 21 net-new tests
+  (domain, conditions, variables, schema, state machines, runtime — linear /
+  conditions / parallel+join / approval suspend+resume / delay / agent
+  orchestration / retry / failure — service, signal + scheduled trigger
+  integration, signal-derived history + correlation, command registration).
+
+- **Nested correlation** (D-607): `AgentService.execute` accepts an optional
+  trusted, server-side `correlation` context; a workflow-triggered agent run and
+  all downstream AI-runtime signals inherit the WorkflowRun correlation id (a
+  standalone run still mints a fresh root; client injection is impossible;
+  `ExecutionContext.causationId` preserves parent depth).
+- **At-least-once trigger deduplication** (D-608): a stable server-derived trigger
+  key + an atomic `WorkflowRepository.claimTrigger` prevent duplicate runs for the
+  same signal/schedule/manual occurrence (durable-constraint-compatible); resume
+  and approval decisions are idempotent.
+
+### Changed
+
+- Added a `workflows` Signal source + catalog entries; the empty `system` command
+  group and nav gain workflow entries. Added a prototype-pollution guard on
+  workflow variable keys.
+
 ## [0.5.5] — 2026-07-27
 
 Sprint 5.5 — **Platform Runtime**. An architectural refactor: promote the
@@ -299,7 +355,8 @@ _Pre-merge review hardening (behavior-preserving):_
   Testing Library, Playwright), infra adapters (Supabase SSR, OpenAI server-only,
   Zod-validated env), and state management (TanStack Query, Zustand).
 
-[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/JCFrith/CommandOS/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.6.0
 [0.5.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.5
 [0.5.0]: https://github.com/JCFrith/CommandOS/releases/tag/v0.5.0
 [0.4.5]: https://github.com/JCFrith/CommandOS/releases/tag/v0.4.5
