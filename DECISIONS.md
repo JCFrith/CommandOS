@@ -482,6 +482,19 @@ service-role-only. The service role bypasses RLS but every adapter query is
 explicitly `workspace_id`-scoped and the service layer authorizes first — so
 there is no client-side elevation path.
 
+### D-656 · Release is gated on live-database validation (approved)
+
+Production infrastructure may not be merged or tagged until validated against its
+actual production substrate — nothing simulated. **All production adapters are now
+written** (Operations/Agents/Workflows+Sink/ExecutionLogger/Signals/Subscriptions/
+Jobs + worker) behind the persistence gate, and the gated validation suites exist.
+But the build host has no database (no CLI/Docker/psql/credentials), so migration
+application/rollback/replay, adapter-contract-against-Postgres, RLS,
+optimistic-concurrency, lease/recovery, failure-injection, `EXPLAIN ANALYZE`, and
+the live production smoke **cannot be executed here**. Therefore Sprint 6.5 stays
+on its branch — **not merged, not tagged** — and **TD-34 stays open** until that
+validation runs against a provisioned Supabase project. D-651..D-655 re-confirmed.
+
 ### D-655 · SignalBus stays in-process; durability lives beneath it
 
 Per directive: keep the in-process `SignalBus`; persistence-backed durability is

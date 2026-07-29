@@ -10,11 +10,14 @@ behind every existing interface — **infrastructure only, no feature behavior
 change** (in-memory stays the default unless `USE_SUPABASE_PERSISTENCE=1`).
 Delivered: the durable **leased job queue + stateless worker** (`/api/worker`,
 Vercel Cron), the complete **schema/RLS/triggers/`claim_jobs`**, the
-`SupabaseLeasedJobStore` + append-only `SupabaseSignalEventStore` + service-role
-client + config-gated wiring, Health `database/queue/worker` subsystems, and the
-adapter-contract harness. Live-DB verification of the Supabase suites is pending a
-provisioned database (no DB in the build host — TD-34). See `docs/persistence.md`,
-`docs/database.md`, `docs/worker.md`, `docs/supabase.md`.
+**every** production repository adapter (Operations/Agents/Workflows+Sink/
+ExecutionLogger/Signals/Subscriptions/Jobs) behind the gate, service-role client +
+config-gated wiring, Health `database/queue/worker` subsystems, and the
+contract/repository harnesses. **Not merged, not tagged** — release is gated on
+live-database validation (migration/RLS/lease/failure/`EXPLAIN`/smoke), which
+cannot run in the DB-less build host (TD-34, D-656). See `docs/persistence.md`,
+`docs/database.md`, `docs/worker.md`, `docs/supabase.md`,
+`docs/operations-runbook.md`.
 
 **Sprint 6 — Workflows & Automation Platform** ✅ complete — merged to `main`,
 tagged `v0.6.0`. Declarative, versioned automation graphs
@@ -220,7 +223,7 @@ unavailable) — all pass.
 
 | Suite            | Result                                                                                   |
 | ---------------- | ---------------------------------------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 261 passing + 1 gated-skip across 48 files (15 net-new for the production foundation) |
+| Unit (Vitest)    | ✅ 265 passing + 1 gated-skip across 50 files (19 net-new for the production foundation) |
 | E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)                               |
 
 Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired

@@ -30,11 +30,17 @@ changes** (the dev in-memory path stays the default unless explicitly enabled).
   - immutable-version + auto-timestamp triggers**, an atomic `claim_jobs`
     (`FOR UPDATE SKIP LOCKED`) function, and **RLS** with service-role boundaries.
     Rollback + seed + `config.toml`.
-- **Production adapters** behind the persistence gate: `SupabaseLeasedJobStore`
-  (durable queue), `SupabaseSignalEventStore` (append-only), a **service-role
-  Supabase client** (`lib/supabase/service.ts`), and config-gated wiring
-  (`isSupabasePersistenceEnabled()` — in-memory otherwise; server-only adapters
-  lazy-required).
+- **Production adapters — every persistence interface** now has a Postgres
+  implementation behind the gate: `SupabaseOperationsRepository`,
+  `SupabaseAgentRepository`, `SupabaseWorkflowRepository` (+ `WorkflowRunSink`),
+  `SupabaseExecutionLogger`, `SupabaseSignalEventStore` (append-only),
+  `SupabaseSignalSubscriptionRepository`, and `SupabaseLeasedJobStore` (durable
+  queue) — plus a new `SignalSubscriptionRepository` interface (+ in-memory) and
+  `operation_activity`/`agent_activity` tables. A **service-role Supabase client**
+  and config-gated wiring (`isSupabasePersistenceEnabled()` — in-memory otherwise;
+  server-only adapters lazy-required). Repository + job-store **contract tests**
+  run against the in-memory impls; the Supabase runs are gated on
+  `SUPABASE_TEST_URL`. Operational runbook: `docs/operations-runbook.md`.
 - **Observability**: Health gains `database`/`queue`/`worker` subsystems; worker
   heartbeat + queue stats; `worker.heartbeat`/`job.completed`/`job.failed` catalog
   entries.
@@ -48,10 +54,14 @@ changes** (the dev in-memory path stays the default unless explicitly enabled).
 - Platform `Job` gains `maxAttempts`/`leaseUntil`/`leaseWorker` (additive);
   `ExecutionContext` unchanged. No public interface redesigned.
 
-> **Verification note:** no live database was available in the build host, so the
-> Supabase adapter-contract / RLS / integration / worker suites are written and
-> gated but **not executed** here (TD-34). All existing gates + the in-memory
-> durable-execution suites pass.
+> **Not released — release gated on live validation (TD-34, D-656).** All
+> production adapters are complete, but the build host has no database, so the
+> Supabase migration/rollback/replay, adapter-contract, RLS, concurrency,
+> lease/recovery, failure-injection, `EXPLAIN ANALYZE`, and live production smoke
+> suites are written/gated but **not executed**. Sprint 6.5 stays on its branch
+> (not merged, not tagged) until validated against a provisioned Supabase project.
+> All runnable gates + the in-memory durable-execution + repository/job-store
+> contract suites pass.
 
 ## [0.6.0] — 2026-07-29
 
