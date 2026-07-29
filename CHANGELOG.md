@@ -9,7 +9,49 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet._
+Sprint 6.5 — **Production Foundation** (on `sprint-6.5-production-foundation`; not
+merged, not tagged). Production-capable Postgres persistence + durable execution
+behind every existing interface — **infrastructure only; no feature behavior
+changes** (the dev in-memory path stays the default unless explicitly enabled).
+
+### Added
+
+- **Durable execution engine**: a leased job store
+  (`LeasedJobStore = ExecutionQueue + JobStore + Scheduler` + leasing) with atomic
+  claim, lease renewal, expiry recovery, retry/backoff, timers, and schedule
+  claiming. The `InMemoryLeasedJobStore` mirrors the Postgres semantics so leasing
+  is unit-tested deterministically; a **stateless `LeasedBackgroundWorker`**
+  (`tick()`) drains a batch per invocation and emits heartbeat/job Signals.
+- **Worker endpoint** `POST/GET /api/worker` (Vercel Cron `* * * * *`, guarded by
+  `CRON_SECRET`) — the stateless durable-execution driver.
+- **Complete PostgreSQL schema** (`supabase/migrations/`): all tables
+  (tenancy/operations/agents/execution-logs/signals/workflows + durable-execution
+  primitives) with FKs, indexes (incl. partial), unique constraints, **append-only
+  - immutable-version + auto-timestamp triggers**, an atomic `claim_jobs`
+    (`FOR UPDATE SKIP LOCKED`) function, and **RLS** with service-role boundaries.
+    Rollback + seed + `config.toml`.
+- **Production adapters** behind the persistence gate: `SupabaseLeasedJobStore`
+  (durable queue), `SupabaseSignalEventStore` (append-only), a **service-role
+  Supabase client** (`lib/supabase/service.ts`), and config-gated wiring
+  (`isSupabasePersistenceEnabled()` — in-memory otherwise; server-only adapters
+  lazy-required).
+- **Observability**: Health gains `database`/`queue`/`worker` subsystems; worker
+  heartbeat + queue stats; `worker.heartbeat`/`job.completed`/`job.failed` catalog
+  entries.
+- **Adapter-contract harness** (`tests/unit/support/job-store-contract.ts`) run
+  against the in-memory store; the Supabase run is gated on `SUPABASE_TEST_URL`.
+  Docs: `docs/persistence.md`, `docs/database.md`, `docs/worker.md`,
+  `docs/supabase.md`. 15 net-new tests.
+
+### Changed
+
+- Platform `Job` gains `maxAttempts`/`leaseUntil`/`leaseWorker` (additive);
+  `ExecutionContext` unchanged. No public interface redesigned.
+
+> **Verification note:** no live database was available in the build host, so the
+> Supabase adapter-contract / RLS / integration / worker suites are written and
+> gated but **not executed** here (TD-34). All existing gates + the in-memory
+> durable-execution suites pass.
 
 ## [0.6.0] — 2026-07-29
 

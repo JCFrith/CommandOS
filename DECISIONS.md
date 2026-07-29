@@ -442,6 +442,52 @@ trigger_key)`. Resume is idempotent (completed nodes skip by node id) and a
 decided approval cannot be re-decided — so at-least-once delivery, duplicate
 resume, and duplicate approval are all safe, without relying on callback timing.
 
+## Sprint 6.5 — Production Foundation (2026-07-29)
+
+Replace development-only infrastructure with production-capable Postgres
+persistence + durable execution, behind every existing interface. No feature
+behavior changes. Full design in `docs/persistence.md`, `docs/database.md`,
+`docs/worker.md`, `docs/supabase.md`.
+
+### D-651 · Production persistence is an opt-in binding swap
+
+Every store already sits behind an interface, so production is an adapter +
+binding swap with no service/UI change. `isSupabasePersistenceEnabled()` gates it
+on Supabase config + service key + an explicit `USE_SUPABASE_PERSISTENCE=1`
+opt-in; otherwise the dev in-memory stores are used with identical behavior.
+Server-only adapters are lazy-required so they never enter the dev/client bundle.
+
+### D-652 · Durable execution = a leased Postgres job queue + a stateless worker
+
+Background execution uses a `LeasedJobStore` (queue + scheduler + leasing). A
+stateless worker (Vercel Cron → `/api/worker` → `tick()`) atomically claims a
+batch via `claim_jobs` (`FOR UPDATE SKIP LOCKED`) with a time-boxed lease, and on
+crash the lease expires and the work is reclaimed — at-least-once + crash-safe,
+with idempotent handlers (the WorkflowRuntime skips completed steps). No
+persistent-process assumptions. The in-memory store mirrors the same semantics so
+the leasing logic is unit-tested deterministically and both satisfy one contract.
+
+### D-653 · Append-only + immutability enforced in the database
+
+`signals`/`signal_events`/`workflow_step_runs`/`execution_logs`/`trigger_claims`/
+`schedule_occurrences` reject `UPDATE`/`DELETE`; `workflow_versions` reject
+`UPDATE` — via triggers, not just application code. Idempotency guarantees are
+DB unique constraints (`trigger_claims`, `workflow_versions`,
+`workflow_approvals`, `schedule_occurrences`).
+
+### D-654 · Service-role bypasses RLS but never tenant isolation
+
+RLS scopes every tenant table to workspace membership; infrastructure tables are
+service-role-only. The service role bypasses RLS but every adapter query is
+explicitly `workspace_id`-scoped and the service layer authorizes first — so
+there is no client-side elevation path.
+
+### D-655 · SignalBus stays in-process; durability lives beneath it
+
+Per directive: keep the in-process `SignalBus`; persistence-backed durability is
+the append-only `signals` table beneath it. No distributed bus / LISTEN·NOTIFY /
+Realtime this sprint. Existing `SignalBus` contracts unchanged.
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:

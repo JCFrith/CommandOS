@@ -1,11 +1,23 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 6 — Workflows & Automation release (`v0.6.0`)._
+_Last updated on the `sprint-6.5-production-foundation` branch (not merged, not tagged)._
 
 ## Current Sprint
 
-**Sprint 6 — Workflows & Automation Platform** ✅ complete — reviewed, merged to
-`main`, tagged `v0.6.0`. Declarative, versioned automation graphs
+**Sprint 6.5 — Production Foundation** 🚧 on `sprint-6.5-production-foundation`
+(not merged, not tagged). Production Postgres persistence + durable execution
+behind every existing interface — **infrastructure only, no feature behavior
+change** (in-memory stays the default unless `USE_SUPABASE_PERSISTENCE=1`).
+Delivered: the durable **leased job queue + stateless worker** (`/api/worker`,
+Vercel Cron), the complete **schema/RLS/triggers/`claim_jobs`**, the
+`SupabaseLeasedJobStore` + append-only `SupabaseSignalEventStore` + service-role
+client + config-gated wiring, Health `database/queue/worker` subsystems, and the
+adapter-contract harness. Live-DB verification of the Supabase suites is pending a
+provisioned database (no DB in the build host — TD-34). See `docs/persistence.md`,
+`docs/database.md`, `docs/worker.md`, `docs/supabase.md`.
+
+**Sprint 6 — Workflows & Automation Platform** ✅ complete — merged to `main`,
+tagged `v0.6.0`. Declarative, versioned automation graphs
 (`WorkflowRuntime`) that orchestrate Operations, Agents, the AI runtime, and
 Signals — triggered by signals/schedules/manually, with conditions, branching,
 parallel+join, delays, approvals, retries, timeouts, cancellation, and
@@ -206,10 +218,10 @@ unavailable) — all pass.
 
 ## Test Status
 
-| Suite            | Result                                                     |
-| ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 244 passing across 45 files (31 net-new for Workflows)  |
-| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
+| Suite            | Result                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| Unit (Vitest)    | ✅ 261 passing + 1 gated-skip across 48 files (15 net-new for the production foundation) |
+| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)                               |
 
 Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired
 `SignalBus` + append-only `SignalEventStore` + `SignalsService`** with feature
