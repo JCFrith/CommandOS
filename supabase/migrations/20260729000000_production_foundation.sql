@@ -379,6 +379,21 @@ create index if not exists idx_jobs_claimable
   on jobs (coalesce(scheduled_for, created_at))
   where status in ('queued','running');
 
+-- Validation probe (used by scripts/validation/validate-env.mjs): reports the
+-- Postgres version, required extensions, and whether the schema is present, so
+-- the fail-closed validator can assert the target DB is a real, ready validation
+-- database. Read-only; service-role callable.
+create or replace function app_validation_probe()
+  returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'version', current_setting('server_version'),
+    'has_pgcrypto', exists (select 1 from pg_extension where extname = 'pgcrypto'),
+    'has_jobs_table', to_regclass('public.jobs') is not null,
+    'has_claim_jobs', exists (select 1 from pg_proc where proname = 'claim_jobs'),
+    'workspace_count', (select count(*) from workspaces)
+  );
+$$;
+
 -- Atomic batch claim for the worker: queued+due OR running+expired-lease, oldest
 -- first, locked with SKIP LOCKED so concurrent workers never claim the same job.
 -- Each claim increments attempts and sets a fresh lease. Service-role only.

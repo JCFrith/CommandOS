@@ -495,6 +495,23 @@ the live production smoke **cannot be executed here**. Therefore Sprint 6.5 stay
 on its branch — **not merged, not tagged** — and **TD-34 stays open** until that
 validation runs against a provisioned Supabase project. D-651..D-655 re-confirmed.
 
+### D-657 · Activity tables are domain execution records, not a second audit history (approved)
+
+`operation_activity` and `agent_activity` are **append-only durable domain
+execution records** consumed by the existing Operations/Agents repositories +
+services — the durable home for the Sprint-3/4 per-feature timelines. They must
+**not** become a competing cross-domain audit system: **Signals remain the
+canonical cross-domain timeline and observability record**; these tables serve
+only their own domain via the existing interfaces.
+
+### D-658 · Production adapters are implementation-complete, not production-verified (approved)
+
+The `Supabase*` adapters are complete and compile/typecheck/unit-pass, but are
+**not production-ready** until the live adapter-contract, RLS, migration,
+concurrency, and failure suites pass against real PostgreSQL. They must not be
+represented as production-ready before then. Sprint 6.5 stays unreleased; Sprint 7
+implementation does not begin (planning accepted as direction).
+
 ### D-655 · SignalBus stays in-process; durability lives beneath it
 
 Per directive: keep the in-process `SignalBus`; persistence-backed durability is

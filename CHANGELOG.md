@@ -48,6 +48,17 @@ changes** (the dev in-memory path stays the default unless explicitly enabled).
   against the in-memory store; the Supabase run is gated on `SUPABASE_TEST_URL`.
   Docs: `docs/persistence.md`, `docs/database.md`, `docs/worker.md`,
   `docs/supabase.md`. 15 net-new tests.
+- **Portable production-validation package** — the release gate for the Postgres
+  path. Fail-closed env validator, migration rollback/replay reversibility check,
+  reproducible perf-fixture generator, `EXPLAIN (ANALYZE, BUFFERS)` runner, and a
+  report/gate aggregator (`scripts/validation/*`); database-backed integration
+  suites (`tests/integration/{database,adapters,worker,rls,concurrency,recovery,
+production-smoke}.test.ts`) run only via `vitest.integration.config.ts` (never in
+  `npm test`); a manual `production-validation` GitHub Actions workflow (local
+  Supabase stack or isolated hosted project); npm scripts (`validate:production`,
+  `db:*`, `test:integration:*`, `test:production:smoke`, `test:performance:database`).
+  Authored but **not yet executed** — no live database on the build host. Docs:
+  `docs/production-validation.md`.
 
 ### Changed
 

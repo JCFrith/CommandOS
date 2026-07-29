@@ -62,3 +62,8 @@ With persistence disabled (the default), the worker exists but the in-memory
 queue is per-realm and workflows run synchronously, so there is nothing to drain
 — identical behavior to before. The durable path activates only when
 `USE_SUPABASE_PERSISTENCE=1` (see [persistence.md](./persistence.md)).
+
+The durable worker's leasing, crash recovery, bounded retries, and idempotency
+are exercised against a real database by the integration suites in
+`tests/integration/{worker,concurrency,recovery}.test.ts`, part of the Sprint 6.5
+release gate — see [production-validation.md](./production-validation.md).

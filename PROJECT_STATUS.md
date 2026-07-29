@@ -13,11 +13,15 @@ Vercel Cron), the complete **schema/RLS/triggers/`claim_jobs`**, the
 **every** production repository adapter (Operations/Agents/Workflows+Sink/
 ExecutionLogger/Signals/Subscriptions/Jobs) behind the gate, service-role client +
 config-gated wiring, Health `database/queue/worker` subsystems, and the
-contract/repository harnesses. **Not merged, not tagged** — release is gated on
-live-database validation (migration/RLS/lease/failure/`EXPLAIN`/smoke), which
-cannot run in the DB-less build host (TD-34, D-656). See `docs/persistence.md`,
-`docs/database.md`, `docs/worker.md`, `docs/supabase.md`,
-`docs/operations-runbook.md`.
+contract/repository harnesses. The **portable production-validation package** is
+now authored — fail-closed env validator, migration rollback/replay check,
+database-backed adapter/RLS/concurrency/recovery/smoke suites, perf fixtures +
+`EXPLAIN` runner, a report/gate aggregator (`npm run validate:production`), and a
+manual GitHub Actions workflow (local Supabase stack or isolated hosted project).
+**Not merged, not tagged** — release is gated on running that package against a
+real database, which cannot happen in the DB-less build host (TD-34, D-656). See
+`docs/production-validation.md`, `docs/persistence.md`, `docs/database.md`,
+`docs/worker.md`, `docs/supabase.md`, `docs/operations-runbook.md`.
 
 **Sprint 6 — Workflows & Automation Platform** ✅ complete — merged to `main`,
 tagged `v0.6.0`. Declarative, versioned automation graphs

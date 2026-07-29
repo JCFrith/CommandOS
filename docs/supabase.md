@@ -62,3 +62,14 @@ host) these are written but not executed — tracked as TD-34.
 - Adapters scope every query by `workspace_id`; the service layer authorizes
   before calling. RLS is defense-in-depth for the anon path; the service role is
   trusted but explicitly scoped. See [database.md](./database.md).
+
+## Production validation (release gate)
+
+These adapters are implementation-complete but **not production-verified** until
+they pass against a real database (decision D-656). The fail-closed validation
+package — environment probe, migration rollback/replay, adapter/RLS/concurrency/
+recovery/smoke suites, and `EXPLAIN` plans — and the two ways to run it (a GitHub
+Actions local Supabase stack, or an isolated hosted project via secrets) are
+documented in [production-validation.md](./production-validation.md). Run it with
+`npm run validate:production` against a disposable validation database; it never
+targets production and never passes by skipping the database-backed suites.

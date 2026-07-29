@@ -1,0 +1,140 @@
+name: Production Validation (Sprint 6.5)
+
+# Manually-invoked ONLY. This is the release gate for Sprint 6.5's production
+# persistence: it stands up (or connects to) a REAL PostgreSQL/Supabase database
+# and runs the full database-backed validation package. It is never triggered by
+# push/PR — a human runs it, reviews the uploaded artifacts, and only then merges.
+#
+# Two paths (choose via the `mode` input):
+#   local  — ephemeral Supabase stack via the Supabase CLI + Docker on the runner.
+#   hosted — an isolated, disposable hosted Supabase project via repository secrets.
+#            NEVER point this at a production project or real customer data.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit SHA or branch to validate (defaults to the ref this workflow runs on).'
+        required: false
+        type: string
+      mode:
+        description: 'Validation target: local (ephemeral CLI stack) or hosted (isolated Supabase project via secrets).'
+        required: true
+        default: local
+        type: choice
+        options: [local, hosted]
+
+# Never run two validations against the same target concurrently.
+concurrency:
+  group: production-validation-${{ github.event.inputs.mode }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PRODUCTION_VALIDATION: '1'
+      # Guardrail: refuse to run destructive validation against a recognized
+      # production project unless an operator explicitly overrides in a hosted run.
+      ALLOW_DESTRUCTIVE_VALIDATION: ${{ github.event.inputs.mode == 'hosted' && secrets.ALLOW_DESTRUCTIVE_VALIDATION || '' }}
+    steps:
+      - name: Check out the requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      - name: Install the Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # ---- LOCAL MODE: ephemeral Supabase stack ---------------------------------
+      - name: Start local Supabase stack
+        if: ${{ github.event.inputs.mode == 'local' }}
+        run: supabase start
+
+      - name: Apply canonical migration (local)
+        if: ${{ github.event.inputs.mode == 'local' }}
+        run: supabase migration up --local
+
+      - name: Export local validation credentials
+        if: ${{ github.event.inputs.mode == 'local' }}
+        run: |
+          # `supabase status -o env` prints KEY=value lines; map them to SUPABASE_TEST_*.
+          eval "$(supabase status -o env)"
+          {
+            echo "SUPABASE_TEST_URL=${API_URL}"
+            echo "SUPABASE_TEST_ANON_KEY=${ANON_KEY}"
+            echo "SUPABASE_TEST_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}"
+            echo "SUPABASE_TEST_DB_URL=${DB_URL}"
+            # Well-known local development JWT secret (safe to expose; local-only).
+            echo "SUPABASE_TEST_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long"
+          } >> "$GITHUB_ENV"
+
+      # ---- HOSTED MODE: isolated disposable project -----------------------------
+      - name: Export hosted validation credentials
+        if: ${{ github.event.inputs.mode == 'hosted' }}
+        env:
+          H_URL: ${{ secrets.SUPABASE_TEST_URL }}
+          H_ANON: ${{ secrets.SUPABASE_TEST_ANON_KEY }}
+          H_SERVICE: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+          H_DB: ${{ secrets.SUPABASE_TEST_DB_URL }}
+          H_JWT: ${{ secrets.SUPABASE_TEST_JWT_SECRET }}
+        run: |
+          # Mask before writing so nothing lands in logs.
+          for v in "$H_URL" "$H_ANON" "$H_SERVICE" "$H_DB" "$H_JWT"; do
+            [ -n "$v" ] && echo "::add-mask::$v"
+          done
+          if [ -z "$H_URL" ] || [ -z "$H_SERVICE" ] || [ -z "$H_DB" ]; then
+            echo "FAIL: hosted mode requires SUPABASE_TEST_URL / SERVICE_ROLE_KEY / DB_URL secrets." >&2
+            exit 1
+          fi
+          {
+            echo "SUPABASE_TEST_URL=${H_URL}"
+            echo "SUPABASE_TEST_ANON_KEY=${H_ANON}"
+            echo "SUPABASE_TEST_SERVICE_ROLE_KEY=${H_SERVICE}"
+            echo "SUPABASE_TEST_DB_URL=${H_DB}"
+            echo "SUPABASE_TEST_JWT_SECRET=${H_JWT}"
+          } >> "$GITHUB_ENV"
+
+      - name: Apply canonical migration + validation helpers (hosted)
+        if: ${{ github.event.inputs.mode == 'hosted' }}
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "applying $f"
+            psql "$SUPABASE_TEST_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Apply validation-only helpers
+        run: psql "$SUPABASE_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/validation/reset.sql
+
+      # ---- RUN THE VALIDATION PACKAGE -------------------------------------------
+      - name: Run production validation (fail-closed)
+        run: npm run validate:production
+
+      # ---- ARTIFACTS (always) ---------------------------------------------------
+      - name: Upload validation artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-validation-${{ github.event.inputs.mode }}-${{ github.run_id }}
+          path: artifacts/production-validation/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ---- CLEANUP (always) -----------------------------------------------------
+      - name: Stop local Supabase stack
+        if: ${{ always() && github.event.inputs.mode == 'local' }}
+        run: supabase stop --no-backup || true

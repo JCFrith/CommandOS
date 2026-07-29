@@ -75,3 +75,9 @@ The schema, triggers, RLS, and `claim_jobs` are written to spec. **Live-database
 verification** (applying migrations + the Supabase adapter-contract + RLS +
 integration suites against a running Postgres) is pending a provisioned Supabase
 project / local `supabase start` — see [supabase.md](./supabase.md) and TD-34.
+
+The portable package that performs that verification — migration rollback/replay,
+adapter contracts, RLS, concurrency, recovery, smoke, and `EXPLAIN` plans — plus
+how to run it (GitHub Actions local stack or an isolated hosted project) is
+documented in [production-validation.md](./production-validation.md). Sprint 6.5
+cannot be released until that gate reports `PASS`.

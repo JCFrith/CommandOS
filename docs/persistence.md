@@ -58,3 +58,8 @@ The in-memory path is per-realm (TD-09). The Postgres path is durable and
 multi-worker: runs/jobs/timers survive restarts, and the leasing model (see
 [worker.md](./worker.md)) recovers work abandoned by a crashed worker. Resume is
 idempotent (workflow steps skip by node id), so at-least-once execution is safe.
+
+The Postgres path is **implementation-complete but not production-verified** until
+it passes the fail-closed validation gate against a real database (D-656); the
+same contract suites run against both the in-memory and Supabase adapters. See
+[production-validation.md](./production-validation.md).

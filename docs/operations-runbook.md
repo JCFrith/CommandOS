@@ -96,3 +96,11 @@ Operations · Agents · Signals + timelines · Workflow create/publish/execute/
 resume/approve/schedule/timer · Queue processing · Worker heartbeat · Crash +
 lease recovery · AI Runtime + execution logging · Nested correlation · Trigger
 dedup · Workspace isolation · RLS · Health · Metrics · HTTP APIs · regression.
+
+## Production database validation
+
+Before the durable/Postgres path is released, run the fail-closed validation gate
+against a real database (never production): trigger the **Production Validation
+(Sprint 6.5)** GitHub Actions workflow (local stack or hosted project), review the
+uploaded `summary.md`, and merge only on `PASS` with zero required skips. Full
+procedure, env vars, and troubleshooting: [production-validation.md](./production-validation.md).
