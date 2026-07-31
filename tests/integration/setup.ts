@@ -6,6 +6,8 @@
  * the app's runtime env to the VALIDATION project + enables the durable path, so
  * every repository binding resolves to its Supabase adapter (asserted per-suite).
  */
+import Module from 'node:module';
+
 const validating = process.env.PRODUCTION_VALIDATION === '1';
 
 if (validating) {
@@ -20,6 +22,48 @@ if (validating) {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.SUPABASE_TEST_ANON_KEY ?? 'anon-key';
   process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKey;
   process.env.USE_SUPABASE_PERSISTENCE = '1';
+
+  // The production singletons bind their server-only adapters via a lazy
+  // `require('@/...')` (keeps `server-only` out of the client bundle). Under
+  // vitest, vite-node leaves `require()` Node-native, which resolves neither the
+  // `@` alias nor `.ts` — so every gated require fails (5 builders swallow it and
+  // fall back to in-memory; the job store throws). In real Next.js the require
+  // resolves. To exercise the true production bindings here, preload each gated
+  // module via ESM import (which vite-node DOES resolve) and intercept the
+  // matching `require()` specifiers to return the real module. Validation-mode
+  // only; other requires are untouched.
+  const preloaded = new Map<string, unknown>([
+    ['@/lib/env', await import('@/lib/env')],
+    [
+      '@/services/operations/supabase-operations-repository',
+      await import('@/services/operations/supabase-operations-repository'),
+    ],
+    [
+      '@/services/agents/supabase-agent-repository',
+      await import('@/services/agents/supabase-agent-repository'),
+    ],
+    [
+      '@/services/workflows/supabase-workflow-repository',
+      await import('@/services/workflows/supabase-workflow-repository'),
+    ],
+    [
+      '@/services/ai/supabase-execution-logger',
+      await import('@/services/ai/supabase-execution-logger'),
+    ],
+    [
+      '@/services/signals/supabase-signal-event-store',
+      await import('@/services/signals/supabase-signal-event-store'),
+    ],
+    ['@/services/jobs/supabase-job-store', await import('@/services/jobs/supabase-job-store')],
+  ]);
+  const loader = Module as unknown as {
+    _load: (request: string, parent: unknown, isMain: boolean) => unknown;
+  };
+  const originalLoad = loader._load;
+  loader._load = function (request: string, parent: unknown, isMain: boolean): unknown {
+    if (preloaded.has(request)) return preloaded.get(request);
+    return originalLoad.call(this, request, parent, isMain);
+  };
 }
 
 /** Whether we are in live production-validation mode (real DB present). */
