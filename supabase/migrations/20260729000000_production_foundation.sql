@@ -501,3 +501,27 @@ begin
     execute format('alter table %I enable row level security', t);
   end loop;
 end $$;
+
+-- ============================================================================
+-- Role privileges (grants)
+-- ============================================================================
+-- RLS above governs which ROWS are visible; these grants govern TABLE access per
+-- Supabase role. Enabling RLS does not grant table privileges, and service_role's
+-- BYPASSRLS does not either — without explicit grants every access is "permission
+-- denied". Granted explicitly so the schema does not depend on ambient
+-- default-privilege configuration (portable across CLI / psql / dashboard apply).
+grant usage on schema public to anon, authenticated, service_role;
+
+-- service_role runs the server-side repositories (and bypasses RLS): full DML.
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+
+-- authenticated gets row-filtered SELECT on TENANT tables only; RLS restricts to
+-- the caller's workspace. Infra tables (jobs, trigger_claims, schedule_occurrences,
+-- signal_subscriptions) are deliberately omitted — they stay service-role-only.
+grant select on
+  workspaces, workspace_members, operations, operation_activity, agents,
+  agent_activity, agent_executions, execution_logs, workflows, workflow_versions,
+  workflow_runs, workflow_step_runs, workflow_approvals, workflow_timers,
+  signals, signal_events
+  to authenticated;
