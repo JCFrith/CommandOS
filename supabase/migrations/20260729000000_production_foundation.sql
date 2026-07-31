@@ -11,15 +11,11 @@ create extension if not exists "pgcrypto";
 -- ============================================================================
 -- Shared helpers
 -- ============================================================================
-
--- Membership check used by every RLS policy.
-create or replace function app_is_member(ws uuid) returns boolean
-  language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from workspace_members m
-    where m.workspace_id = ws and m.user_id = auth.uid()
-  );
-$$;
+-- NOTE: `app_is_member` is defined later, immediately before the RLS section —
+-- it is a `language sql` function whose body is validated at creation time, so
+-- it must come AFTER `workspace_members` exists. The trigger helpers below are
+-- `plpgsql` (bodies not validated at creation) and are referenced by triggers
+-- created after the tables, so they are safe to define up front.
 
 -- Reject UPDATE/DELETE on append-only tables.
 create or replace function app_forbid_mutation() returns trigger
@@ -454,6 +450,18 @@ end $$;
 -- ============================================================================
 -- Row Level Security (workspace isolation)
 -- ============================================================================
+
+-- Membership check used by every RLS policy. Defined here (not in the shared
+-- helpers at the top) because it is a `language sql` function whose body is
+-- validated at creation time and references `workspace_members`, which must
+-- already exist.
+create or replace function app_is_member(ws uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from workspace_members m
+    where m.workspace_id = ws and m.user_id = auth.uid()
+  );
+$$;
 
 -- Every tenant table: members can SELECT their workspace; writes go through the
 -- server (service role bypasses RLS but always filters by workspace_id).
