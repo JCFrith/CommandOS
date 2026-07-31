@@ -1,5 +1,7 @@
 import type { Operation, OperationActivity } from '@/types';
 import type { OperationsRepository } from './operations-repository';
+import type * as EnvMod from '@/lib/env';
+import type * as SupaOpsMod from '@/services/operations/supabase-operations-repository';
 
 /**
  * DEVELOPMENT-ONLY {@link OperationsRepository}.
@@ -84,7 +86,23 @@ const globalForOperations = globalThis as typeof globalThis & {
   __operationsRepository?: OperationsRepository;
 };
 
+/* eslint-disable @typescript-eslint/no-require-imports */
+function buildOperationsRepository(): OperationsRepository {
+  try {
+    const env = require('@/lib/env') as typeof EnvMod;
+    if (env.isSupabasePersistenceEnabled()) {
+      const mod =
+        require('@/services/operations/supabase-operations-repository') as typeof SupaOpsMod;
+      return new mod.SupabaseOperationsRepository();
+    }
+  } catch {
+    /* fall through to the dev store */
+  }
+  return new InMemoryOperationsRepository();
+}
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 export const operationsRepository: OperationsRepository =
-  globalForOperations.__operationsRepository ?? new InMemoryOperationsRepository();
+  globalForOperations.__operationsRepository ?? buildOperationsRepository();
 
 globalForOperations.__operationsRepository = operationsRepository;

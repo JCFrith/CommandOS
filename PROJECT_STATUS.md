@@ -1,11 +1,32 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 6 — Workflows & Automation release (`v0.6.0`)._
+_Last updated at the Sprint 6.5 — Production Foundation release (`v0.6.5`)._
 
 ## Current Sprint
 
-**Sprint 6 — Workflows & Automation Platform** ✅ complete — reviewed, merged to
-`main`, tagged `v0.6.0`. Declarative, versioned automation graphs
+**Sprint 6.5 — Production Foundation** ✅ complete — **validated against real
+PostgreSQL, merged to `main`, tagged `v0.6.5`**. Production Postgres persistence +
+durable execution behind every existing interface — **infrastructure only, no
+feature behavior change** (in-memory stays the default unless
+`USE_SUPABASE_PERSISTENCE=1`). Delivered: the durable **leased job queue +
+stateless worker** (`/api/worker`, Vercel Cron), the complete
+**schema/RLS/triggers/grants/`claim_jobs`**, **every** production repository
+adapter (Operations/Agents/Workflows+Sink/ExecutionLogger/Signals/Subscriptions/
+Jobs) behind the gate, service-role client + config-gated wiring, Health
+`database/queue/worker` subsystems, and the contract/repository harnesses. The
+**portable production-validation package** (fail-closed env validator, migration
+rollback/replay check, database-backed adapter/RLS/concurrency/recovery/smoke
+suites, perf fixtures + `EXPLAIN` runner, `npm run validate:production`, and a
+manual GitHub Actions workflow) **ran against a real database and reported PASS**:
+30/30 DB-backed tests, 0 required skips, canonical-schema round-trip verified, 14
+hot-path `EXPLAIN` plans captured. Validation caught and fixed two genuine
+production/schema defects (migration ordering; missing table grants); the
+measured plans warranted no index changes. See `docs/production-validation.md`,
+`docs/persistence.md`, `docs/database.md`, `docs/worker.md`, `docs/supabase.md`,
+`docs/operations-runbook.md`.
+
+**Sprint 6 — Workflows & Automation Platform** ✅ complete — merged to `main`,
+tagged `v0.6.0`. Declarative, versioned automation graphs
 (`WorkflowRuntime`) that orchestrate Operations, Agents, the AI runtime, and
 Signals — triggered by signals/schedules/manually, with conditions, branching,
 parallel+join, delays, approvals, retries, timeouts, cancellation, and
@@ -206,10 +227,10 @@ unavailable) — all pass.
 
 ## Test Status
 
-| Suite            | Result                                                     |
-| ---------------- | ---------------------------------------------------------- |
-| Unit (Vitest)    | ✅ 244 passing across 45 files (31 net-new for Workflows)  |
-| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle) |
+| Suite            | Result                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| Unit (Vitest)    | ✅ 265 passing + 1 gated-skip across 50 files (19 net-new for the production foundation) |
+| E2E (Playwright) | Configured; `home.spec.ts` present (not run in this cycle)                               |
 
 Runtime smoke (Sprint 5): an in-process walkthrough drives the **real wired
 `SignalBus` + append-only `SignalEventStore` + `SignalsService`** with feature

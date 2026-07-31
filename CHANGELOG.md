@@ -11,6 +11,92 @@ this file is the terse, versioned log.
 
 _Nothing yet._
 
+## [0.6.5] — 2026-07-31
+
+Sprint 6.5 — **Production Foundation**. Production-capable Postgres persistence +
+durable execution behind every existing interface — **infrastructure only; no
+feature behavior changes** (the dev in-memory path stays the default unless
+explicitly enabled). **Validated against real PostgreSQL** (Postgres 15.8 via a
+local Supabase stack in the `production-validation` GitHub Actions workflow):
+release gate **PASS** — 30/30 database-backed tests, 0 skipped; migration
+rollback/replay reproduces the canonical schema; 14 hot-path `EXPLAIN (ANALYZE,
+BUFFERS)` plans captured.
+
+### Added
+
+- **Durable execution engine**: a leased job store
+  (`LeasedJobStore = ExecutionQueue + JobStore + Scheduler` + leasing) with atomic
+  claim, lease renewal, expiry recovery, retry/backoff, timers, and schedule
+  claiming. The `InMemoryLeasedJobStore` mirrors the Postgres semantics so leasing
+  is unit-tested deterministically; a **stateless `LeasedBackgroundWorker`**
+  (`tick()`) drains a batch per invocation and emits heartbeat/job Signals.
+- **Worker endpoint** `POST/GET /api/worker` (Vercel Cron `* * * * *`, guarded by
+  `CRON_SECRET`) — the stateless durable-execution driver.
+- **Complete PostgreSQL schema** (`supabase/migrations/`): all tables
+  (tenancy/operations/agents/execution-logs/signals/workflows + durable-execution
+  primitives) with FKs, indexes (incl. partial), unique constraints, **append-only
+  - immutable-version + auto-timestamp triggers**, an atomic `claim_jobs`
+    (`FOR UPDATE SKIP LOCKED`) function, and **RLS** with service-role boundaries.
+    Rollback + seed + `config.toml`.
+- **Production adapters — every persistence interface** now has a Postgres
+  implementation behind the gate: `SupabaseOperationsRepository`,
+  `SupabaseAgentRepository`, `SupabaseWorkflowRepository` (+ `WorkflowRunSink`),
+  `SupabaseExecutionLogger`, `SupabaseSignalEventStore` (append-only),
+  `SupabaseSignalSubscriptionRepository`, and `SupabaseLeasedJobStore` (durable
+  queue) — plus a new `SignalSubscriptionRepository` interface (+ in-memory) and
+  `operation_activity`/`agent_activity` tables. A **service-role Supabase client**
+  and config-gated wiring (`isSupabasePersistenceEnabled()` — in-memory otherwise;
+  server-only adapters lazy-required). Repository + job-store **contract tests**
+  run against the in-memory impls; the Supabase runs are gated on
+  `SUPABASE_TEST_URL`. Operational runbook: `docs/operations-runbook.md`.
+- **Observability**: Health gains `database`/`queue`/`worker` subsystems; worker
+  heartbeat + queue stats; `worker.heartbeat`/`job.completed`/`job.failed` catalog
+  entries.
+- **Adapter-contract harness** (`tests/unit/support/job-store-contract.ts`) run
+  against the in-memory store; the Supabase run is gated on `SUPABASE_TEST_URL`.
+  Docs: `docs/persistence.md`, `docs/database.md`, `docs/worker.md`,
+  `docs/supabase.md`. 15 net-new tests.
+- **Portable production-validation package** — the release gate for the Postgres
+  path. Fail-closed env validator, migration rollback/replay reversibility check,
+  reproducible perf-fixture generator, `EXPLAIN (ANALYZE, BUFFERS)` runner, and a
+  report/gate aggregator (`scripts/validation/*`); database-backed integration
+  suites (`tests/integration/{database,adapters,worker,rls,concurrency,recovery,
+production-smoke}.test.ts`) run only via `vitest.integration.config.ts` (never in
+  `npm test`); a manual `production-validation` GitHub Actions workflow (local
+  Supabase stack or isolated hosted project); npm scripts (`validate:production`,
+  `db:*`, `test:integration:*`, `test:production:smoke`, `test:performance:database`).
+  Authored but **not yet executed** — no live database on the build host. Docs:
+  `docs/production-validation.md`.
+
+### Changed
+
+- Platform `Job` gains `maxAttempts`/`leaseUntil`/`leaseWorker` (additive);
+  `ExecutionContext` unchanged. No public interface redesigned.
+
+### Fixed (defects uncovered by live validation)
+
+- **Migration ordering**: `app_is_member` (a `language sql` function whose body is
+  validated at creation) was defined before its `workspace_members` table, so the
+  canonical migration could not apply to an empty database. Moved after the tables.
+- **Missing table grants**: the schema enabled RLS + policies but never granted
+  table privileges to the Supabase roles, so every server-side (`service_role`)
+  and authenticated read would be "permission denied" in production. Added explicit
+  grants (full DML to `service_role`; row-filtered `SELECT` to `authenticated` on
+  tenant tables; infra tables stay service-role-only).
+- Harness/CI only (no app behavior change): validation runs on Node 22 (native
+  WebSocket for `supabase-js`); `pg_dump` `\restrict` random tokens normalized out
+  of the schema diff; the durable-store lazy require uses the `@/` alias; a
+  vitest `Module._load` shim lets the production-smoke suite build the real gated
+  Supabase singletons; deterministic fixture/plan uuids via `md5()::uuid`.
+
+> **Released.** The `production-validation` workflow reported PASS against real
+> PostgreSQL with zero required failures and zero required skips (see
+> `docs/production-validation.md`). Two genuine production/schema defects were
+> found and fixed during validation; the rest were validation-harness fixes.
+> Performance review: all high-volume hot paths (queue claim, lease recovery,
+> signal timeline/correlation/subject, workflow history) use indexes at 10k-row
+> scale (sub-millisecond); no index changes were warranted by the measured plans.
+
 ## [0.6.0] — 2026-07-29
 
 Sprint 6 — **Workflows & Automation Platform**. Declarative, versioned automation

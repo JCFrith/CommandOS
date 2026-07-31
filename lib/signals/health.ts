@@ -1,5 +1,6 @@
 import type { SignalMetrics } from './metrics';
 import type { SignalBusHealth } from './bus';
+import type { QueueStats } from '@/lib/platform/background';
 
 /**
  * Reusable health monitoring — a small, honest model of subsystem status,
@@ -43,6 +44,17 @@ export interface HealthInputs {
   metrics: SignalMetrics;
   bus: SignalBusHealth;
   now: string;
+  /** Infrastructure facts (present when the production path is wired). */
+  infra?: {
+    /** Whether durable (Postgres) persistence is enabled. */
+    persistenceEnabled: boolean;
+    /** Whether the last database probe succeeded (undefined = not probed). */
+    databaseReachable?: boolean;
+    /** Queue/lease snapshot from the durable job store. */
+    queue?: QueueStats;
+    /** Age (ms) of the last worker heartbeat, or null if none seen. */
+    workerHeartbeatAgeMs?: number | null;
+  };
 }
 
 /** Roll a set of subsystem statuses up into the worst (most severe) one. */
@@ -117,9 +129,85 @@ function busHealth(inputs: HealthInputs): SubsystemHealth {
   };
 }
 
+function databaseHealth(inputs: HealthInputs): SubsystemHealth | null {
+  const infra = inputs.infra;
+  if (!infra) return null;
+  if (!infra.persistenceEnabled) {
+    return {
+      subsystem: 'database',
+      status: 'unknown',
+      detail: 'Development in-memory persistence (durable store not enabled).',
+      checkedAt: inputs.now,
+    };
+  }
+  const reachable = infra.databaseReachable !== false;
+  return {
+    subsystem: 'database',
+    status: reachable ? 'healthy' : 'unavailable',
+    detail: reachable ? 'Postgres reachable.' : 'Database probe failed.',
+    checkedAt: inputs.now,
+  };
+}
+
+function queueHealth(inputs: HealthInputs): SubsystemHealth | null {
+  const q = inputs.infra?.queue;
+  if (!q) return null;
+  // Degraded if work is backing up or leases are expiring faster than draining.
+  const status: HealthStatus =
+    q.expiredLeases > 0 ? 'warning' : q.queued > 500 ? 'degraded' : 'healthy';
+  return {
+    subsystem: 'queue',
+    status,
+    detail:
+      status === 'healthy'
+        ? 'Queue draining normally.'
+        : `${q.queued} queued, ${q.expiredLeases} expired leases.`,
+    checkedAt: inputs.now,
+    metrics: {
+      queued: q.queued,
+      running: q.running,
+      failed: q.failed,
+      expiredLeases: q.expiredLeases,
+      oldestQueuedMs: q.oldestQueuedMs ?? 0,
+    },
+  };
+}
+
+function workerHealth(inputs: HealthInputs): SubsystemHealth | null {
+  const infra = inputs.infra;
+  if (!infra?.persistenceEnabled) return null;
+  const age = infra.workerHeartbeatAgeMs;
+  const status: HealthStatus =
+    age === null || age === undefined
+      ? 'unknown'
+      : age > 300_000
+        ? 'degraded'
+        : age > 120_000
+          ? 'warning'
+          : 'healthy';
+  return {
+    subsystem: 'worker',
+    status,
+    detail:
+      status === 'unknown'
+        ? 'No worker heartbeat seen yet.'
+        : status === 'healthy'
+          ? 'Worker ticking on schedule.'
+          : `Last heartbeat ${Math.round((age ?? 0) / 1000)}s ago.`,
+    checkedAt: inputs.now,
+  };
+}
+
 /** Assess platform health from observed facts. */
 export function computeHealth(inputs: HealthInputs): PlatformHealth {
-  const subsystems = [providerHealth(inputs), runtimeHealth(inputs), busHealth(inputs)];
+  const subsystems = [
+    providerHealth(inputs),
+    runtimeHealth(inputs),
+    busHealth(inputs),
+    databaseHealth(inputs),
+    queueHealth(inputs),
+    workerHealth(inputs),
+  ].filter((s): s is SubsystemHealth => s !== null);
   return {
     overall: worstStatus(subsystems.map((s) => s.status)),
     subsystems,

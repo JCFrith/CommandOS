@@ -150,6 +150,11 @@ export const SIGNAL_CATALOG = {
     'Provider unavailable',
   ),
 
+  // --- Background worker / durable jobs (system) ---
+  'worker.heartbeat': spec('worker.heartbeat', 'runtime', 'system', 'trace', 'Worker heartbeat'),
+  'job.completed': spec('job.completed', 'runtime', 'execution', 'trace', 'Job completed'),
+  'job.failed': spec('job.failed', 'runtime', 'execution', 'error', 'Job failed'),
+
   // --- Authentication / authorization (security) ---
   'auth.succeeded': spec('auth.succeeded', 'auth', 'security', 'info', 'Authentication succeeded'),
   'auth.failed': spec('auth.failed', 'auth', 'security', 'warning', 'Authentication failed'),

@@ -46,10 +46,14 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22+ is required: @supabase/supabase-js initializes a realtime client
+          # that needs a native global WebSocket (absent on Node 20). Production
+          # runs Node 24 on Vercel; 22 is the recommended floor and satisfies the
+          # project's `engines.node >=20`.
+          node-version: 22
           cache: npm
 
       - name: Install dependencies (locked)

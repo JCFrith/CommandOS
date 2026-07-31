@@ -1,0 +1,20 @@
+# Supabase CLI project config (local development).
+# `supabase start` boots a local Postgres + Auth; `supabase db reset` applies
+# migrations/ then seed.sql. Production uses a hosted Supabase project with the
+# same migrations. See docs/supabase.md.
+
+project_id = "commandos"
+
+[db]
+major_version = 15
+
+[db.migrations]
+schema_paths = ["./migrations/*.sql"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+
+[api]
+enabled = true
+schemas = ["public"]
