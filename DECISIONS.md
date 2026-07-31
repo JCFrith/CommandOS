@@ -495,6 +495,20 @@ the live production smoke **cannot be executed here**. Therefore Sprint 6.5 stay
 on its branch — **not merged, not tagged** — and **TD-34 stays open** until that
 validation runs against a provisioned Supabase project. D-651..D-655 re-confirmed.
 
+**Gate satisfied (2026-07-31).** The `production-validation` GitHub Actions
+workflow ran against **real PostgreSQL** (Postgres 15.8, local Supabase stack) and
+reported **PASS**: 30/30 database-backed tests, **0 required skips**; migration
+apply + rollback + replay reproduces the canonical schema; all 14 hot-path
+`EXPLAIN (ANALYZE, BUFFERS)` plans captured. Validation uncovered — and fixed —
+**two genuine production/schema defects** that no compile/unit/in-memory check
+could have caught: (1) `app_is_member` defined before its `workspace_members`
+table (migration unapplicable to an empty DB), and (2) no table `GRANT`s to the
+Supabase roles (every `service_role`/authenticated access would be "permission
+denied"). The remaining fixes were validation-harness only. Performance review of
+the measured plans warranted **no index changes**. TD-34 resolved (TD-R12);
+Sprint 6.5 released as **v0.6.5**. This is the reference precedent for D-656: the
+gate did its job — it caught real defects, not hypothetical ones.
+
 ### D-657 · Activity tables are domain execution records, not a second audit history (approved)
 
 `operation_activity` and `agent_activity` are **append-only durable domain

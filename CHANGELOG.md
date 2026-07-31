@@ -9,10 +9,18 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 6.5 — **Production Foundation** (on `sprint-6.5-production-foundation`; not
-merged, not tagged). Production-capable Postgres persistence + durable execution
-behind every existing interface — **infrastructure only; no feature behavior
-changes** (the dev in-memory path stays the default unless explicitly enabled).
+_Nothing yet._
+
+## [0.6.5] — 2026-07-31
+
+Sprint 6.5 — **Production Foundation**. Production-capable Postgres persistence +
+durable execution behind every existing interface — **infrastructure only; no
+feature behavior changes** (the dev in-memory path stays the default unless
+explicitly enabled). **Validated against real PostgreSQL** (Postgres 15.8 via a
+local Supabase stack in the `production-validation` GitHub Actions workflow):
+release gate **PASS** — 30/30 database-backed tests, 0 skipped; migration
+rollback/replay reproduces the canonical schema; 14 hot-path `EXPLAIN (ANALYZE,
+BUFFERS)` plans captured.
 
 ### Added
 
@@ -65,14 +73,29 @@ production-smoke}.test.ts`) run only via `vitest.integration.config.ts` (never i
 - Platform `Job` gains `maxAttempts`/`leaseUntil`/`leaseWorker` (additive);
   `ExecutionContext` unchanged. No public interface redesigned.
 
-> **Not released — release gated on live validation (TD-34, D-656).** All
-> production adapters are complete, but the build host has no database, so the
-> Supabase migration/rollback/replay, adapter-contract, RLS, concurrency,
-> lease/recovery, failure-injection, `EXPLAIN ANALYZE`, and live production smoke
-> suites are written/gated but **not executed**. Sprint 6.5 stays on its branch
-> (not merged, not tagged) until validated against a provisioned Supabase project.
-> All runnable gates + the in-memory durable-execution + repository/job-store
-> contract suites pass.
+### Fixed (defects uncovered by live validation)
+
+- **Migration ordering**: `app_is_member` (a `language sql` function whose body is
+  validated at creation) was defined before its `workspace_members` table, so the
+  canonical migration could not apply to an empty database. Moved after the tables.
+- **Missing table grants**: the schema enabled RLS + policies but never granted
+  table privileges to the Supabase roles, so every server-side (`service_role`)
+  and authenticated read would be "permission denied" in production. Added explicit
+  grants (full DML to `service_role`; row-filtered `SELECT` to `authenticated` on
+  tenant tables; infra tables stay service-role-only).
+- Harness/CI only (no app behavior change): validation runs on Node 22 (native
+  WebSocket for `supabase-js`); `pg_dump` `\restrict` random tokens normalized out
+  of the schema diff; the durable-store lazy require uses the `@/` alias; a
+  vitest `Module._load` shim lets the production-smoke suite build the real gated
+  Supabase singletons; deterministic fixture/plan uuids via `md5()::uuid`.
+
+> **Released.** The `production-validation` workflow reported PASS against real
+> PostgreSQL with zero required failures and zero required skips (see
+> `docs/production-validation.md`). Two genuine production/schema defects were
+> found and fixed during validation; the rest were validation-harness fixes.
+> Performance review: all high-volume hot paths (queue claim, lease recovery,
+> signal timeline/correlation/subject, workflow history) use indexes at 10k-row
+> scale (sub-millisecond); no index changes were warranted by the measured plans.
 
 ## [0.6.0] — 2026-07-29
 

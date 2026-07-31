@@ -7,10 +7,13 @@ are necessary but not sufficient** to release it (decision **D-656**). This
 document describes the portable validation package that must pass against a
 **real** database before Sprint 6.5 can be merged or tagged.
 
-> **Status:** the build/CI host used to author Sprint 6.5 cannot provision or run
-> PostgreSQL/Supabase. Nothing here has been executed against a live database yet.
-> Until the workflow below produces a `PASS` report, Sprint 6.5 stays unreleased
-> and **TD-34** stays open. The validation must not be simulated or bypassed.
+> **Status (2026-07-31): PASSED.** The `production-validation` workflow ran against
+> real PostgreSQL (Postgres 15.8, local Supabase stack) and reported **PASS** —
+> 30/30 database-backed tests, 0 required skips, canonical-schema rollback/replay
+> verified, 14 hot-path `EXPLAIN` plans captured. Sprint 6.5 was released as
+> **v0.6.5** and **TD-34** is resolved. Validation uncovered and fixed two genuine
+> production/schema defects (migration ordering; missing table grants). Re-run this
+> gate whenever the schema, adapters, or durable-execution paths change.
 
 ## What the gate proves
 
