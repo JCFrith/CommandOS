@@ -25,8 +25,9 @@ const N = {
   correlations: Number(process.env.CORRELATION_COUNT ?? 500),
 };
 
-// A stable uuid derived from a namespace + integer — no randomness, fully reproducible.
-const uuid = (ns, expr) => `('x' || substr(md5('${ns}:' || (${expr})::text), 1, 32))::uuid`;
+// A stable uuid derived from a namespace + integer — no randomness, fully
+// reproducible. md5() returns exactly 32 hex chars, which cast directly to uuid.
+const uuid = (ns, expr) => `(md5('${ns}:' || (${expr})::text)::uuid)`;
 
 const sql = `
 begin;

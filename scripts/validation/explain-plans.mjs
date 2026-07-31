@@ -19,8 +19,8 @@ const OUT = join(resolve(process.cwd()), 'artifacts', 'production-validation', '
 mkdirSync(OUT, { recursive: true });
 
 // A concrete workspace present in the fixtures (same derivation as gen-fixtures).
-const WS = `('x' || substr(md5('ws:1'), 1, 32))::uuid`;
-const CORR = `('x' || substr(md5('corr:1'), 1, 32))::uuid`;
+const WS = `(md5('ws:1')::uuid)`;
+const CORR = `(md5('corr:1')::uuid)`;
 const now = `now()`;
 
 /** The runtime's hot paths, each mapped to the exact shape the adapters issue. */
@@ -39,14 +39,14 @@ const QUERIES = [
     `select id from workflow_timers where due_at <= ${now} and claimed_at is null limit 100`],
   ['schedule-lookup',
     `select 1 from schedule_occurrences where workspace_id = ${WS}
-       and workflow_id = ('x' || substr(md5('wf:1'), 1, 32))::uuid and occurrence_key = 'k1'`],
+       and workflow_id = (md5('wf:1')::uuid) and occurrence_key = 'k1'`],
   ['signal-timeline',
     `select * from signals where workspace_id = ${WS} order by created_at desc limit 50`],
   ['signal-by-correlation',
     `select * from signals where workspace_id = ${WS} and correlation_id = ${CORR} order by created_at desc`],
   ['signal-by-subject',
     `select * from signals where workspace_id = ${WS} and subject_type = 'operation'
-       and subject_id = ('x' || substr(md5('subj:1'), 1, 32))::uuid order by created_at desc`],
+       and subject_id = (md5('subj:1')::uuid) order by created_at desc`],
   ['workflow-history',
     `select * from workflow_runs where workspace_id = ${WS} order by created_at desc limit 50`],
   ['suspended-workflows',
