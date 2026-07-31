@@ -9,7 +9,49 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet._
+Sprint 6.6 — **Operational Readiness** (on `sprint-6.6-operational-readiness`; not
+merged, not tagged). Closes the two highest-leverage gaps from the post-v0.6.5
+health assessment — continuous CI and a defined/validated staging path — with **no
+new product features** and no architecture redesign.
+
+### Added
+
+- **`CommandOS CI`** (`.github/workflows/ci.yml`): lint · typecheck · test · build on
+  every PR + `main` push and manual dispatch. Node 22, `npm ci` + cache, concurrency
+  cancellation, least-privilege `contents: read`, 20-min timeout, failure-log
+  artifacts. **No Supabase/production credentials** (unit suites are in-memory;
+  `npm test` excludes `tests/integration/**`). Verified green on GitHub.
+- **Staging + deployment playbooks**: `docs/staging.md` (isolated Supabase project +
+  Vercel, `USE_SUPABASE_PERSISTENCE=1`, hosted-validation + full smoke/worker
+  checklist, cleanup), `docs/deployment.md` (environment matrix, canonical env-var
+  reference, deploy/rollback, adapter + worker verification, production-readiness
+  checklist), `docs/ci.md` (CI behavior + branch-protection status-check setup).
+- **Operational visibility mapping + security review** in `docs/operations-runbook.md`
+  (existing Health/Queue/Signals surfaces cover deployment/worker/db/queue-depth/
+  oldest-job/heartbeat-age/failed/expired-lease/provider/overall; external alerting
+  documented as a known limitation, notification framework unchanged).
+
+### Decisions
+
+- **D-661** — CI and production-validation are separate workflows (fast/credential-free
+  vs manual/DB-backed). **D-662** — SignalBus deployment decision: the in-process bus
+  is sufficient (durable persistence + durable reads); signal/schedule workflow
+  triggers rely on ephemeral in-process registration → a correctness gap under
+  multi-instance serverless (**TD-36**), fixed by durable trigger evaluation (Sprint 7
+  design), **not** a distributed bus. **D-663** — staging = isolated Supabase + Vercel,
+  durability on, never production data.
+
+### Tech debt
+
+- Revised **TD-03** (unit-gate CI now exists + green; Playwright browser E2E still not
+  automated — kept open). Added **TD-36** (durable workflow-trigger evaluation).
+  TD-02/09/31/35 remain open (no supporting evidence to close).
+
+> **Not released.** The staging half (isolated Supabase + Vercel deploy, hosted
+> validation against staging, deployment smoke, worker/cron validation) requires
+> provisioned cloud infrastructure and could not run in the build/session host.
+> Per the sprint's gate rules, v0.6.6 is **not** merged/tagged until hosted staging
+> validation is green and staging smoke passes. CI is green.
 
 ## [0.6.5] — 2026-07-31
 

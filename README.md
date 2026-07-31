@@ -62,8 +62,23 @@ tests/        unit/ (Vitest) and e2e/ (Playwright)
 docs/         Source-of-truth documentation
 ```
 
+## CI & deployment
+
+- **CI** (`CommandOS CI`, `.github/workflows/ci.yml`) runs `lint · typecheck · test ·
+build` on every PR and `main` push (Node 22, no secrets). See [docs/ci.md](./docs/ci.md).
+- **Persistence is opt-in.** By default the app runs on in-memory dev adapters. The
+  durable Postgres/Supabase path activates only when `USE_SUPABASE_PERSISTENCE=1` with
+  a configured Supabase URL/anon key + `SUPABASE_SERVICE_ROLE_KEY`.
+- **Environments, env vars, deploy + rollback:** [docs/deployment.md](./docs/deployment.md).
+- **Staging provisioning + smoke checklist:** [docs/staging.md](./docs/staging.md).
+- **Release gate (real DB):** [docs/production-validation.md](./docs/production-validation.md).
+
+Server-only secrets (`SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `OPENAI_API_KEY`)
+are never `NEXT_PUBLIC_*` and never reach the browser.
+
 ## Documentation
 
 - [`MASTER_BUILD.md`](./MASTER_BUILD.md) — the authoritative build directive & roadmap (overrides all other docs on conflict)
 - [`CLAUDE.md`](./CLAUDE.md) — engineering conventions for AI/human contributors
 - [`docs/`](./docs) — architecture, design language, and sprint plan
+- [`docs/ci.md`](./docs/ci.md) · [`docs/deployment.md`](./docs/deployment.md) · [`docs/staging.md`](./docs/staging.md) — CI, deployment, staging

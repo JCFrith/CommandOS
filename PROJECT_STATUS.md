@@ -1,8 +1,20 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 6.5 — Production Foundation release (`v0.6.5`)._
+_Last updated on `sprint-6.6-operational-readiness` (CI landed + green; staging half pending infra)._
 
 ## Current Sprint
+
+**Sprint 6.6 — Operational Readiness** 🚧 on `sprint-6.6-operational-readiness`
+(not merged, not tagged). Closes the two highest-leverage post-v0.6.5 gaps — **no
+new features**. **Done + verified:** `CommandOS CI` (lint/typecheck/test/build on
+every PR + `main`, Node 22, no secrets) is authored and **green on GitHub**; the
+SignalBus deployment decision (D-662), security review, and operational-visibility
+mapping are complete; the staging + deployment playbooks (`docs/staging.md`,
+`docs/deployment.md`, `docs/ci.md`) are written. **Pending provisioned infra
+(operator action):** an isolated Supabase staging project + Vercel deploy with
+`USE_SUPABASE_PERSISTENCE=1`, hosted validation against staging, and the deployment
+smoke + worker/cron checks. Per the sprint's own gate rules, **v0.6.6 is not
+merged/tagged** until hosted staging validation is green and staging smoke passes.
 
 **Sprint 6.5 — Production Foundation** ✅ complete — **validated against real
 PostgreSQL, merged to `main`, tagged `v0.6.5`**. Production Postgres persistence +

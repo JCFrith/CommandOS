@@ -64,3 +64,27 @@ Development-only: in-process and per-worker (TD-09/TD-21). The durable transport
 `bus.health()` feeds the `signal-bus` subsystem in
 [observability.md](./observability.md): `failedDeliveries === 0` is healthy; a
 small ratio of failures is a `warning`; a large ratio is `degraded`.
+
+## Deployment decision (multi-instance / serverless) — see D-662
+
+Under a multi-instance serverless deployment the in-process bus is **sufficient for
+every consumer that is durable or same-request**:
+
+- The **persistence subscriber** runs synchronously in the emitting request and
+  appends to the Postgres `SignalEventStore`. Same-request fan-out is all it needs.
+- **Read surfaces** (timelines, metrics, health, correlation queries) read from the
+  durable store, never from live bus subscriptions — so they are correct across
+  instances and cold starts.
+
+The one consumer that would need cross-instance delivery — the **workflow
+`TriggerEngine`** for signal- and schedule-triggered runs — subscribes to the
+in-process bus, and its registrations are **ephemeral per-instance state** (driven
+by the activate lifecycle). A signal emitted on one instance only fires triggers
+registered on that instance; a cold-started instance holds none. This is a
+correctness gap for signal/schedule triggers under multi-instance serverless
+(**TD-36**), but it is a property of _trigger registration being in-process_, not
+of the bus's fan-out semantics. The correct fix is **durable trigger evaluation**
+(the worker scans persisted signals / due schedules and claims runs), **not** a
+distributed bus. No Supabase Realtime / `LISTEN·NOTIFY` / distributed messaging is
+added speculatively; durable trigger evaluation is deferred to Sprint 7 design
+(requires approval). The `SignalBus` interface is unchanged.

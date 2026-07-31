@@ -73,3 +73,7 @@ Actions local Supabase stack, or an isolated hosted project via secrets) are
 documented in [production-validation.md](./production-validation.md). Run it with
 `npm run validate:production` against a disposable validation database; it never
 targets production and never passes by skipping the database-backed suites.
+
+## Staging & deployment
+
+Provisioning an isolated Supabase **staging** project (never production; durability on) and deploying it is documented in [staging.md](./staging.md) and [deployment.md](./deployment.md). The canonical env-var reference (server-only vs `NEXT_PUBLIC_*`) is in [deployment.md](./deployment.md).

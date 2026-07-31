@@ -104,3 +104,60 @@ against a real database (never production): trigger the **Production Validation
 (Sprint 6.5)** GitHub Actions workflow (local stack or hosted project), review the
 uploaded `summary.md`, and merge only on `PASS` with zero required skips. Full
 procedure, env vars, and troubleshooting: [production-validation.md](./production-validation.md).
+
+## Operational visibility (staging)
+
+Every operational signal a staging operator needs already exists in the in-app
+Health / Queue / Signals model — no new observability platform is added
+(Sprint 6.6). Where to read each:
+
+| Question                      | Source                                                                                                                        |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Application deployment status | Vercel dashboard (deployment/build state)                                                                                     |
+| Worker invocation status      | authorized `GET/POST /api/worker` returns the tick summary (`claimed/completed/failed/reclaimed`); `worker.heartbeat` signals |
+| Database connectivity         | Health `databaseReachable` (the `database` subsystem)                                                                         |
+| Queue depth                   | `QueueStats.queued`                                                                                                           |
+| Oldest queued job             | `QueueStats.oldestQueuedMs`                                                                                                   |
+| Worker heartbeat age          | Health `workerHeartbeatAgeMs`                                                                                                 |
+| Failed-job count              | `QueueStats.failed`                                                                                                           |
+| Expired-lease count           | `QueueStats.expiredLeases`                                                                                                    |
+| Provider availability         | Health `providerAvailable` (the `provider` subsystem)                                                                         |
+| Overall health                | Health overview roll-up (worst subsystem) + `job.completed`/`job.failed` signals                                              |
+
+These are surfaced in the authenticated console health view and computed from real
+signals (never fabricated). The worker tick response requires `CRON_SECRET`.
+
+**Known limitation — external alerting (unchanged).** There is no
+unauthenticated/monitor HTTP health endpoint and **no external alerting**; the
+notification framework remains **interfaces-only** (unchanged this sprint). A
+staging operator determines health through the console, the secret-protected worker
+tick, and the Vercel dashboard. Wiring the notification framework to a real channel
+(and/or a monitor-friendly health endpoint) is future work, tracked as tech debt.
+
+## Security review (Sprint 6.6)
+
+Reviewed for the CI + staging deployment path; findings:
+
+- **GitHub Actions permissions** — `ci.yml` and `production-validation.yml` both use
+  `permissions: contents: read` (least privilege). Neither grants write/packages/id-token.
+- **Fork PR safety** — CI uses `pull_request` (not `pull_request_target`) and reads
+  no secrets, so untrusted fork code cannot exfiltrate secrets or write to the repo.
+- **Secret exposure in logs** — hosted validation masks the `SUPABASE_TEST_*` secrets
+  (`::add-mask::`) before writing them to `$GITHUB_ENV`; CI writes no secrets. Gate
+  logs teed to `ci-logs/` contain no credentials.
+- **Dependency install** — `npm ci` against the committed lockfile; no lifecycle
+  scripts from feature deps are relied upon (native-install warnings are TD-A4).
+- **Service-role usage** — server-only (`SUPABASE_SERVICE_ROLE_KEY`), never
+  `NEXT_PUBLIC_*`; bypasses RLS but adapters always scope by `workspace_id`.
+- **Cron secret** — `/api/worker` requires `Authorization: Bearer $CRON_SECRET` and
+  returns `401` otherwise; not weakened for staging.
+- **Adapter fallback** — the durable path is opt-in; the production-smoke suite
+  fails if any binding is in-memory, so a misconfigured "durable" deploy is caught.
+- **Production-project targeting safeguard** — the env validator refuses a recognized
+  production project unless `ALLOW_DESTRUCTIVE_VALIDATION` is explicitly set.
+- **Staging isolation** — staging uses a disposable Supabase project; validation
+  truncates data, so it must never point at a project with data to keep (documented
+  in [staging.md](./staging.md)).
+
+No secrets are exposed to untrusted pull-request code. Branch protection (requiring
+`CommandOS CI`) is a repo-admin setting — see [ci.md](./ci.md).

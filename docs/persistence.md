@@ -63,3 +63,7 @@ The Postgres path is **implementation-complete but not production-verified** unt
 it passes the fail-closed validation gate against a real database (D-656); the
 same contract suites run against both the in-memory and Supabase adapters. See
 [production-validation.md](./production-validation.md).
+
+## Staging & deployment
+
+Running the durable path on a real hosted deployment (isolated Supabase staging + Vercel, `USE_SUPABASE_PERSISTENCE=1`) — including how to verify the active adapters are Supabase-backed and not in-memory — is documented in [staging.md](./staging.md) and [deployment.md](./deployment.md).
