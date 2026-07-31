@@ -114,20 +114,23 @@ if (PRODUCTION_VALIDATION) {
         .eq('id', ver.id);
       expect(verErr, 'workflow_versions UPDATE must be rejected (immutable)').not.toBeNull();
 
+      // run_id is a uuid column; real callers pass workflow-run uuids.
+      const run1 = '11111111-1111-1111-1111-111111111111';
+      const run2 = '22222222-2222-2222-2222-222222222222';
       const a = await repo.claimTrigger({
         workspaceId: WS_A,
         triggerKey: 'k1',
-        runId: 'r1',
+        runId: run1,
         createdAt: now,
       });
       const b = await repo.claimTrigger({
         workspaceId: WS_A,
         triggerKey: 'k1',
-        runId: 'r2',
+        runId: run2,
         createdAt: now,
       });
       expect(a.claimed).toBe(true);
-      expect(b).toEqual({ claimed: false, existingRunId: 'r1' });
+      expect(b).toEqual({ claimed: false, existingRunId: run1 });
     });
   });
 } else {

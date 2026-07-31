@@ -33,8 +33,14 @@ const now = '2026-08-01T00:00:00.000Z';
   it('concurrent duplicate trigger claims yield exactly one winner', async () => {
     await resetDb();
     const repo = new SupabaseWorkflowRepository();
+    // run_id is a uuid column; give each racer a distinct valid uuid.
     const attempts = Array.from({ length: 8 }, (_, i) =>
-      repo.claimTrigger({ workspaceId: WS_A, triggerKey: 'dup', runId: `r${i}`, createdAt: now }),
+      repo.claimTrigger({
+        workspaceId: WS_A,
+        triggerKey: 'dup',
+        runId: `00000000-0000-0000-0000-00000000000${i}`,
+        createdAt: now,
+      }),
     );
     const results = await Promise.all(attempts);
     expect(results.filter((r) => r.claimed)).toHaveLength(1);

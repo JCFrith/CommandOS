@@ -25,7 +25,7 @@ function buildStore(): LeasedJobStore {
     // Lazily require the server-only Supabase adapter only when enabled, so the
     // in-memory/dev path never pulls `server-only` into non-server bundles.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./supabase-job-store') as typeof SupabaseJobStoreModule;
+    const mod = require('@/services/jobs/supabase-job-store') as typeof SupabaseJobStoreModule;
     return new mod.SupabaseLeasedJobStore();
   }
   return new InMemoryLeasedJobStore({
