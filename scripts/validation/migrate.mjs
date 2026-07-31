@@ -43,10 +43,20 @@ function dumpSchema(label) {
   const out = execFileSync('pg_dump', ['--schema-only', '--no-owner', '--no-privileges', DB_URL], {
     encoding: 'utf8',
   });
-  // Strip volatile comment lines so the diff is deterministic across runs/hosts.
+  // Strip volatile lines so the diff reflects only real schema differences:
+  //  - `--` comment lines and blanks (cosmetic)
+  //  - `\restrict`/`\unrestrict` psql meta-commands, which recent pg_dump emits
+  //    with a RANDOM per-invocation token (Postgres Sept-2025 security release);
+  //    identical schemas would otherwise always differ on that token.
   const normalized = out
     .split('\n')
-    .filter((l) => !l.startsWith('--') && l.trim() !== '')
+    .filter(
+      (l) =>
+        !l.startsWith('--') &&
+        !l.startsWith('\\restrict') &&
+        !l.startsWith('\\unrestrict') &&
+        l.trim() !== '',
+    )
     .join('\n');
   writeFileSync(join(LOG_DIR, `schema.${label}.sql`), normalized);
   return normalized;
