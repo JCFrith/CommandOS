@@ -2,6 +2,20 @@ import { createHmac } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { expect } from 'vitest';
 
+// Prime vitest's module cache with the server-only Supabase adapter modules.
+// The production singletons load them via a gated `require('@/...')`; vitest's
+// CJS require only alias-resolves modules already loaded via ESM import, so
+// without these static imports `assertSupabaseBindings` can't build the real
+// singletons ("Cannot find module"). Static `@/` imports resolve in vitest, so
+// these ensure every gated require hits the cache. Test-only; `server-only` is
+// shimmed by vitest.integration.config.ts.
+import '@/services/operations/supabase-operations-repository';
+import '@/services/agents/supabase-agent-repository';
+import '@/services/workflows/supabase-workflow-repository';
+import '@/services/ai/supabase-execution-logger';
+import '@/services/signals/supabase-signal-event-store';
+import '@/services/jobs/supabase-job-store';
+
 const b64url = (buf: Buffer | string) =>
   Buffer.from(buf).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
