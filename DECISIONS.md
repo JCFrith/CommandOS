@@ -582,6 +582,30 @@ customer data. Its purpose is to convert "validated in a disposable local stack"
 into "operational on a real hosted deployment" before Sprint 7. See
 [staging.md](./docs/staging.md).
 
+### Sprint 6.6 approvals (2026-08-01)
+
+Confirmed by the product owner:
+
+- **D-661 approved** — CI (`CommandOS CI`) and production-validation stay separate;
+  CI is credential-free and fast, validation is manual/DB-backed.
+- **D-662 / TD-36 approved** — durable signal **and** schedule trigger evaluation
+  will be implemented via the **stateless worker scanning persisted Signals +
+  schedules**. **No** Supabase Realtime / `LISTEN·NOTIFY` / distributed bus. The
+  in-process `SignalBus` stays responsible for synchronous same-request fan-out;
+  **PostgreSQL remains the durable source of truth**. **TD-36 stays open** until the
+  worker-driven implementation is built and verified.
+- **D-663 approved** — staging is an isolated Supabase project + Vercel, durability
+  on, never production data.
+- **Sprint 7 sequencing approved** — Sprint 7 **must begin with durable trigger
+  evaluation**; Intelligence/Decision-Engine features may only follow reliable
+  persisted trigger processing. Order: **durable trigger evaluation → Decision
+  Engine → Insights & Recommendations → Human approval & execution**.
+- **Branch protection approved** — `CommandOS CI` becomes a **required status check**
+  for `main`; PRs must not merge while it is failing or pending; branch protection is
+  not bypassed for routine releases.
+- **Sprint 6.6 remains unreleased** — PR #1 is not merged and `v0.6.6` is not created
+  until staging validation passes.
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:
