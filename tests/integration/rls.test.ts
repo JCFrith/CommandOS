@@ -1,42 +1,76 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   anonDb,
+  deleteUser,
+  ensureUser,
   resetDb,
+  signedInClient,
   testDb,
-  userClient,
-  USER_A_MEMBER,
-  USER_B_OWNER,
-  USER_UNKNOWN,
   WS_A,
   WS_B,
 } from './helpers';
 import { PRODUCTION_VALIDATION } from './setup';
 
 const now = '2026-08-01T00:00:00.000Z';
-const opRow = (id: string, ws: string) => ({
+const PW = 'Test-Passw0rd-6f2!';
+const MEMBER_A = 'rls-member-a@commandos.test';
+const OWNER_B = 'rls-owner-b@commandos.test';
+const UNKNOWN = 'rls-nobody@commandos.test';
+
+const opRow = (id: string, ws: string, createdBy: string) => ({
   id,
   workspace_id: ws,
   title: 't',
   description: null,
   status: 'draft',
   priority: 'medium',
-  created_by: USER_A_MEMBER,
-  updated_by: USER_A_MEMBER,
+  created_by: createdBy,
+  updated_by: createdBy,
   created_at: now,
   updated_at: now,
 });
 
-/** RLS + security validation against real authenticated identities. */
+/**
+ * RLS + security validation against REAL authenticated identities (GoTrue users +
+ * genuine access tokens — no hand-minted JWTs, so it holds regardless of the
+ * project's JWT signing scheme).
+ */
 (PRODUCTION_VALIDATION ? describe : describe.skip)('RLS & security', () => {
+  let memberAId = '';
+  let ownerBId = '';
+
+  beforeAll(async () => {
+    memberAId = await ensureUser(MEMBER_A, PW);
+    ownerBId = await ensureUser(OWNER_B, PW);
+    await ensureUser(UNKNOWN, PW); // a real user with NO workspace membership
+  });
+
+  afterAll(async () => {
+    await deleteUser(MEMBER_A);
+    await deleteUser(OWNER_B);
+    await deleteUser(UNKNOWN);
+  });
+
   beforeEach(async () => {
-    await resetDb();
-    await testDb().from('operations').insert(opRow('00000000-0000-0000-0000-00000000aa01', WS_A));
-    await testDb().from('operations').insert(opRow('00000000-0000-0000-0000-00000000bb01', WS_B));
+    await resetDb(); // truncates + re-seeds workspaces A/B
+    // Grant our real users their memberships (resetDb truncated workspace_members).
+    await testDb()
+      .from('workspace_members')
+      .insert([
+        { workspace_id: WS_A, user_id: memberAId, role: 'member' },
+        { workspace_id: WS_B, user_id: ownerBId, role: 'owner' },
+      ]);
+    await testDb()
+      .from('operations')
+      .insert([
+        opRow('00000000-0000-0000-0000-00000000aa01', WS_A, memberAId),
+        opRow('00000000-0000-0000-0000-00000000bb01', WS_B, ownerBId),
+      ]);
   });
 
   it('a member of A reads A, not B', async () => {
-    const a = userClient(USER_A_MEMBER);
+    const a = await signedInClient(MEMBER_A, PW);
     expect((await a.from('operations').select().eq('workspace_id', WS_A)).data?.length).toBe(1);
     expect((await a.from('operations').select().eq('workspace_id', WS_B)).data?.length ?? 0).toBe(
       0,
@@ -44,7 +78,7 @@ const opRow = (id: string, ws: string) => ({
   });
 
   it('a member of A cannot mutate B', async () => {
-    const a = userClient(USER_A_MEMBER);
+    const a = await signedInClient(MEMBER_A, PW);
     const { data } = await a
       .from('operations')
       .update({ title: 'hacked' })
@@ -53,8 +87,8 @@ const opRow = (id: string, ws: string) => ({
     expect(data?.length ?? 0).toBe(0); // RLS blocks the update (no rows visible)
   });
 
-  it('an unauthorized authenticated user sees nothing', async () => {
-    const u = userClient(USER_UNKNOWN);
+  it('an authenticated user with no membership sees nothing', async () => {
+    const u = await signedInClient(UNKNOWN, PW);
     expect((await u.from('operations').select()).data?.length ?? 0).toBe(0);
   });
 
@@ -65,7 +99,8 @@ const opRow = (id: string, ws: string) => ({
   it('infrastructure tables (jobs, trigger_claims) are not readable by clients', async () => {
     await testDb().from('jobs').insert({ workspace_id: WS_A, kind: 'k', payload: {} });
     expect((await anonDb().from('jobs').select()).data?.length ?? 0).toBe(0);
-    expect((await userClient(USER_B_OWNER).from('jobs').select()).data?.length ?? 0).toBe(0);
+    const b = await signedInClient(OWNER_B, PW);
+    expect((await b.from('jobs').select()).data?.length ?? 0).toBe(0);
   });
 
   it('append-only tables reject UPDATE and DELETE (service role too)', async () => {
