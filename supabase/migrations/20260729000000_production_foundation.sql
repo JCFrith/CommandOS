@@ -98,7 +98,11 @@ begin
     on conflict (workspace_id, user_id) do nothing;
   return ws;
 end $$;
-revoke all on function app_provision_personal_workspace(uuid, text) from public;
+-- Server-only: revoke from public AND from anon/authenticated (Supabase's default
+-- privileges grant execute on new public functions directly to those roles, so
+-- revoking from public alone is not enough). Only the service role — used by the
+-- server with a trusted user id — may provision.
+revoke all on function app_provision_personal_workspace(uuid, text) from public, anon, authenticated;
 grant execute on function app_provision_personal_workspace(uuid, text) to service_role;
 
 -- ============================================================================
