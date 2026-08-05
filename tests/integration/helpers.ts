@@ -125,11 +125,14 @@ export async function assertSupabaseBindings(): Promise<void> {
   const { executionLogger } = await import('@/lib/ai/runtime/logging');
   const { signalEventStore } = await import('@/lib/signals');
   const { jobStore } = await import('@/services/jobs');
+  const { workspaceRepository } =
+    await import('@/services/workspaces/personal-workspace-repository');
 
   const bindings: Record<string, string> = {
     OperationsRepository: operationsRepository.constructor.name,
     AgentRepository: agentRepository.constructor.name,
     WorkflowRepository: workflowRepository.constructor.name,
+    WorkspaceRepository: workspaceRepository.constructor.name,
     ExecutionLogger: executionLogger.constructor.name,
     SignalEventStore: signalEventStore.constructor.name,
     JobStore: jobStore.constructor.name,
