@@ -1,7 +1,9 @@
+import type * as EnvMod from '@/lib/env';
 import type { AuthUser, Workspace } from '@/types';
 import type { WorkspaceRepository } from './workspace-repository';
+import type * as SupabaseWorkspaceMod from './supabase-workspace-repository';
 
-/** Deterministic id for a user's personal workspace. */
+/** Deterministic id for a user's personal workspace (dev/in-memory only). */
 export function personalWorkspaceId(userId: string): string {
   return `personal-${userId}`;
 }
@@ -34,8 +36,31 @@ export class PersonalWorkspaceRepository implements WorkspaceRepository {
   }
 }
 
-/** The active workspace repository. Swap here when team workspaces arrive. */
-export const workspaceRepository: WorkspaceRepository = new PersonalWorkspaceRepository();
+/**
+ * The active workspace repository, gated on persistence: the Postgres-backed
+ * {@link SupabaseWorkspaceRepository} (persisted uuid workspaces + memberships)
+ * when Supabase persistence is enabled, otherwise the dev in-memory
+ * {@link PersonalWorkspaceRepository} — unchanged behavior with persistence off.
+ * The server-only Supabase adapter is lazily required so the dev path never pulls
+ * `server-only` into non-server bundles.
+ */
+/* eslint-disable @typescript-eslint/no-require-imports */
+function buildWorkspaceRepository(): WorkspaceRepository {
+  try {
+    const env = require('@/lib/env') as typeof EnvMod;
+    if (env.isSupabasePersistenceEnabled()) {
+      const mod =
+        require('@/services/workspaces/supabase-workspace-repository') as typeof SupabaseWorkspaceMod;
+      return new mod.SupabaseWorkspaceRepository();
+    }
+  } catch {
+    /* fall through to the dev in-memory repository */
+  }
+  return new PersonalWorkspaceRepository();
+}
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+export const workspaceRepository: WorkspaceRepository = buildWorkspaceRepository();
 
 /**
  * Resolve the workspaces available to a (possibly signed-out) operator and the

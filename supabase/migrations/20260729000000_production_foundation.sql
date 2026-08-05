@@ -63,6 +63,44 @@ create table if not exists workspace_members (
 );
 create index if not exists idx_members_user on workspace_members (user_id);
 
+-- Personal-workspace ownership. `owner_id` marks the owning user of a PERSONAL
+-- workspace; the partial unique index enforces exactly one personal workspace per
+-- owner and makes concurrent first-request provisioning race-safe (a losing
+-- inserter resolves the winner). Team workspaces (owner_id null) are unaffected
+-- and may be many. Added via ALTER (idempotent) so already-applied databases gain
+-- the column on re-apply.
+alter table workspaces add column if not exists owner_id uuid;
+create unique index if not exists uq_workspace_personal_owner
+  on workspaces (owner_id) where kind = 'personal';
+
+-- Idempotent, concurrency-safe personal-workspace provisioning. Called
+-- SERVER-SIDE with the service role and a TRUSTED authenticated user id (never
+-- client-chosen): returns the user's personal workspace, creating it + the owner
+-- membership on first call. `security definer` so it writes through RLS; execute
+-- is revoked from public and granted only to the service role, so no anon or
+-- authenticated client can invoke it or provision for another user.
+create or replace function app_provision_personal_workspace(p_user_id uuid, p_name text)
+  returns workspaces language plpgsql security definer set search_path = public as $$
+declare ws public.workspaces;
+begin
+  select * into ws from workspaces where owner_id = p_user_id and kind = 'personal' limit 1;
+  if not found then
+    insert into workspaces (owner_id, name, slug, kind)
+      values (p_user_id, coalesce(nullif(p_name, ''), 'Personal workspace'), 'personal', 'personal')
+      on conflict (owner_id) where kind = 'personal' do nothing
+      returning * into ws;
+    if ws.id is null then
+      select * into ws from workspaces where owner_id = p_user_id and kind = 'personal' limit 1;
+    end if;
+  end if;
+  insert into workspace_members (workspace_id, user_id, role)
+    values (ws.id, p_user_id, 'owner')
+    on conflict (workspace_id, user_id) do nothing;
+  return ws;
+end $$;
+revoke all on function app_provision_personal_workspace(uuid, text) from public;
+grant execute on function app_provision_personal_workspace(uuid, text) to service_role;
+
 -- ============================================================================
 -- Operations
 -- ============================================================================

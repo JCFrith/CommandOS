@@ -55,6 +55,10 @@ if (validating) {
       await import('@/services/signals/supabase-signal-event-store'),
     ],
     ['@/services/jobs/supabase-job-store', await import('@/services/jobs/supabase-job-store')],
+    [
+      '@/services/workspaces/supabase-workspace-repository',
+      await import('@/services/workspaces/supabase-workspace-repository'),
+    ],
   ]);
   const loader = Module as unknown as {
     _load: (request: string, parent: unknown, isMain: boolean) => unknown;

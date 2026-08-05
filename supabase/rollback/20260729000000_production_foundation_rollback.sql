@@ -23,6 +23,7 @@ drop table if exists operations cascade;
 drop table if exists workspace_members cascade;
 drop table if exists workspaces cascade;
 
+drop function if exists app_provision_personal_workspace(uuid, text);
 drop function if exists app_is_member(uuid);
 drop function if exists app_forbid_mutation();
 drop function if exists app_forbid_update();
