@@ -470,6 +470,24 @@ grant execute on function app_advance_trigger_cursor(uuid, timestamptz, uuid, ti
 revoke all on function app_reset_trigger_cursor(uuid) from public, anon, authenticated;
 grant execute on function app_reset_trigger_cursor(uuid) to service_role;
 
+-- Bounded, ordered signal scan after a (created_at, id) cursor for durable trigger
+-- evaluation. Uses idx_signals_scan; hard-capped so a backlog can't unbound a tick.
+create or replace function app_scan_signals_after(
+  p_workspace uuid, p_created_at timestamptz, p_signal_id uuid, p_limit int
+) returns setof signals language sql stable security definer set search_path = public as $$
+  select * from signals
+  where workspace_id = p_workspace
+    and (
+      p_created_at is null
+      or created_at > p_created_at
+      or (created_at = p_created_at and id > coalesce(p_signal_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    )
+  order by created_at asc, id asc
+  limit greatest(0, least(coalesce(p_limit, 200), 1000));
+$$;
+revoke all on function app_scan_signals_after(uuid, timestamptz, uuid, int) from public, anon, authenticated;
+grant execute on function app_scan_signals_after(uuid, timestamptz, uuid, int) to service_role;
+
 -- Durable job queue with leasing.
 create table if not exists jobs (
   id uuid primary key default gen_random_uuid(),

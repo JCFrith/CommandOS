@@ -1,5 +1,16 @@
-import type { Signal } from '@/lib/signals/types';
 import type { Workflow, WorkflowVersion } from '@/lib/workflows/types';
+
+/** The minimal, workspace-scoped signal projection the evaluator reads. */
+export interface ScannedSignal {
+  id: string;
+  workspaceId: string;
+  type: string;
+  correlationId: string;
+  /** Signal source; a `workflows`-sourced signal is skipped (self-trigger guard). */
+  source: string;
+  /** ISO timestamp; ordered with `id` as the deterministic scan position. */
+  createdAt: string;
+}
 
 /**
  * Durable, worker-driven trigger evaluation (Sprint 7 Phase 1, D-666).
@@ -48,7 +59,7 @@ export interface DurableTriggerPort {
     workspaceId: string,
     cursor: SignalCursor | null,
     limit: number,
-  ): Promise<Signal[]>;
+  ): Promise<ScannedSignal[]>;
   readCursor(workspaceId: string): Promise<SignalCursor | null>;
   /** Monotonic advance (implementation refuses to move backward). */
   advanceCursor(workspaceId: string, to: SignalCursor): Promise<void>;
@@ -66,7 +77,7 @@ export interface SignalPassResult {
 }
 
 /** True if `version` reacts to `signal` (same workspace + a matching signal trigger). */
-export function signalMatchesVersion(signal: Signal, version: WorkflowVersion): boolean {
+export function signalMatchesVersion(signal: ScannedSignal, version: WorkflowVersion): boolean {
   if (version.workspaceId !== signal.workspaceId) return false; // no cross-workspace matching
   return version.triggers.some((t) => t.type === 'signal' && t.signalType === signal.type);
 }
