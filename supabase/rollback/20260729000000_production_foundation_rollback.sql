@@ -24,6 +24,9 @@ drop table if exists operations cascade;
 drop table if exists workspace_members cascade;
 drop table if exists workspaces cascade;
 
+drop function if exists app_claim_trigger_run(uuid, text, uuid, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz);
+drop function if exists app_advance_trigger_cursor(uuid, timestamptz, uuid, timestamptz);
+drop function if exists app_reset_trigger_cursor(uuid);
 drop function if exists app_provision_personal_workspace(uuid, text);
 drop function if exists app_is_member(uuid);
 drop function if exists app_forbid_mutation();

@@ -410,6 +410,66 @@ create table if not exists trigger_scan_cursor (
 -- Ordered signal scan for trigger evaluation: workspace-scoped, (created_at, id) ASC.
 create index if not exists idx_signals_scan on signals (workspace_id, created_at, id);
 
+-- Atomic claim → create run → enqueue (Sprint 7 Phase 1, D-666). One transaction so
+-- a crash can never leave a claimed occurrence stranded without a run+job. Idempotent:
+-- re-processing the same occurrence conflicts on `trigger_claims (workspace_id,
+-- trigger_key)` and returns the existing run without creating another run or job.
+-- Server-only (trusted user id from the server session).
+create or replace function app_claim_trigger_run(
+  p_workspace uuid, p_trigger_key text, p_run_id uuid, p_workflow_id uuid, p_version_id uuid,
+  p_correlation_id uuid, p_trigger jsonb, p_variables jsonb, p_started_by uuid,
+  p_job_kind text, p_now timestamptz
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_existing uuid;
+begin
+  insert into trigger_claims (workspace_id, trigger_key, run_id, created_at)
+    values (p_workspace, p_trigger_key, p_run_id, p_now)
+    on conflict (workspace_id, trigger_key) do nothing;
+  if not found then
+    select run_id into v_existing from trigger_claims
+      where workspace_id = p_workspace and trigger_key = p_trigger_key;
+    return jsonb_build_object('claimed', false, 'run_id', v_existing);
+  end if;
+  insert into workflow_runs (id, workspace_id, workflow_id, version_id, correlation_id,
+      status, trigger, trigger_key, variables, frontier, join_arrivals, started_by, created_at, updated_at)
+    values (p_run_id, p_workspace, p_workflow_id, p_version_id, p_correlation_id,
+      'pending', p_trigger, p_trigger_key, coalesce(p_variables, '{}'::jsonb), '{}', '{}', p_started_by, p_now, p_now);
+  insert into jobs (workspace_id, kind, payload, status, created_at, updated_at)
+    values (p_workspace, p_job_kind,
+      jsonb_build_object('workspaceId', p_workspace, 'runId', p_run_id, 'versionId', p_version_id),
+      'queued', p_now, p_now);
+  return jsonb_build_object('claimed', true, 'run_id', p_run_id);
+end $$;
+
+-- Monotonic cursor advance: concurrent workers can only move the cursor FORWARD under
+-- (created_at, id); a stale writer's update is a no-op (D-665).
+create or replace function app_advance_trigger_cursor(
+  p_workspace uuid, p_created_at timestamptz, p_signal_id uuid, p_now timestamptz
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into trigger_scan_cursor (workspace_id, last_signal_created_at, last_signal_id, updated_at)
+    values (p_workspace, p_created_at, p_signal_id, p_now)
+  on conflict (workspace_id) do update
+    set last_signal_created_at = excluded.last_signal_created_at,
+        last_signal_id = excluded.last_signal_id,
+        updated_at = excluded.updated_at
+    where (trigger_scan_cursor.last_signal_created_at, trigger_scan_cursor.last_signal_id)
+        < (excluded.last_signal_created_at, excluded.last_signal_id);
+end $$;
+
+-- Operational cursor reset: next scan re-initializes to the signal frontier.
+create or replace function app_reset_trigger_cursor(p_workspace uuid)
+  returns void language sql security definer set search_path = public as $$
+  delete from trigger_scan_cursor where workspace_id = p_workspace;
+$$;
+
+revoke all on function app_claim_trigger_run(uuid, text, uuid, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz) from public, anon, authenticated;
+grant execute on function app_claim_trigger_run(uuid, text, uuid, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz) to service_role;
+revoke all on function app_advance_trigger_cursor(uuid, timestamptz, uuid, timestamptz) from public, anon, authenticated;
+grant execute on function app_advance_trigger_cursor(uuid, timestamptz, uuid, timestamptz) to service_role;
+revoke all on function app_reset_trigger_cursor(uuid) from public, anon, authenticated;
+grant execute on function app_reset_trigger_cursor(uuid) to service_role;
+
 -- Durable job queue with leasing.
 create table if not exists jobs (
   id uuid primary key default gen_random_uuid(),
