@@ -649,6 +649,44 @@ real staging project; live real-user smoke: sign-in provisioned a uuid workspace
 owner membership, Operations/Agents/Workflows created and persisted, survived a
 redeploy, and a second user was fully isolated. Not left as open debt.
 
+## Sprint 7 — Intelligence & Decision Engine (2026-08-05)
+
+Full plan: [docs/sprint-7-plan.md](./docs/sprint-7-plan.md). Approved sequence:
+durable trigger evaluation → Decision Engine → Insights & Recommendations → Human
+approval & execution. Phase 1 ships as `v0.7.0` before any Decision Engine work.
+
+### D-665 · Trigger-scan cursor is a progress marker, not the correctness mechanism
+
+A durable per-workspace `trigger_scan_cursor` records scan progress. `trigger_claims`
+(unique) remains the **authoritative** dedup guarantee. Cursor advancement is
+monotonic and safely replayable: a crash **before** advancement may reprocess
+signals but never creates a duplicate `WorkflowRun`; a crash **after** advancement
+never skips unclaimed work. Concurrency-safe (two workers may scan a workspace
+redundantly, never losing work) and operationally resettable without corrupting dedup.
+
+### D-666 · Durable worker execution (approved)
+
+Signal-triggered, scheduled, timer-resume, and approval-resume workflow work is
+**enqueued into the existing `LeasedJobStore`** (`workflow.run` / `workflow.resume`
+kinds). With persistence enabled, workflow execution no longer depends on an HTTP
+request's lifetime or a specific serverless instance. In-memory dev retains the
+synchronous `TriggerEngine`. Public `WorkflowService`/`WorkflowRuntime` contracts
+stay stable where possible.
+
+### D-667 · Trigger latency bounded by worker cadence (approved)
+
+~1-minute production target where the plan supports it; staging Hobby cadence
+documented. **No** self-invoking workers, distributed messaging, Realtime,
+`LISTEN/NOTIFY`, or another scheduler is introduced solely to reach sub-minute latency.
+
+### D-668 · Fold timer + approval resumption into worker-driven execution (approved)
+
+Durable timer resumption and approval-triggered resume use the same worker-driven
+architecture; approval decisions enqueue an **idempotent** resume job rather than
+continuing in-process. This materially reduces **TD-31**, but TD-31 is **not closed**
+unless mid-flight `AbortSignal` cancellation into Agent/AI calls is also implemented
+and verified.
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:

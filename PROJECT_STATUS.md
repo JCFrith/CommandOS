@@ -1,8 +1,17 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 6.6 — Operational Readiness release (`v0.6.6`)._
+_Last updated at the start of Sprint 7 Phase 1 (durable triggers), on `sprint-7-durable-triggers`._
 
 ## Current Sprint
+
+**Sprint 7 — Intelligence & Decision Engine** 🚧 **Phase 1 — Durable Trigger
+Evaluation** in progress on `sprint-7-durable-triggers` (targets `v0.7.0`). Replaces
+instance-local workflow trigger evaluation with durable, worker-driven evaluation
+over persisted Signals, schedules, timers, and trigger claims via the existing
+`LeasedJobStore` — resolving TD-36 (and materially reducing TD-31). No distributed
+bus/Realtime; latency bounded by worker cadence (D-665..D-668). Decision Engine,
+Insights, and Intelligence UI are **not** started (blocked on Phase 1 staging
+validation). Plan: `docs/sprint-7-plan.md`.
 
 **Sprint 6.6 — Operational Readiness** ✅ complete — **validated on a live staging
 deployment, merged to `main`, tagged `v0.6.6`**. Closes the two highest-leverage

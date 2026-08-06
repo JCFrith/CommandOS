@@ -9,7 +9,11 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet._
+Sprint 7 — **Intelligence & Decision Engine** · Phase 1 (Durable Trigger Evaluation),
+in progress on `sprint-7-durable-triggers` (targets `v0.7.0`; not merged/tagged).
+Durable, worker-driven evaluation of Signal/schedule/timer/approval triggers via the
+existing `LeasedJobStore` — resolving TD-36. Decisions D-665..D-668. See
+`docs/sprint-7-plan.md`.
 
 ## [0.6.6] — 2026-08-05
 
