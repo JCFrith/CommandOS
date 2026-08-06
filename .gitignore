@@ -68,3 +68,4 @@ yarn-error.log*
 * [2-9].json
 * [2-9].css
 * [2-9].scss
+.env*

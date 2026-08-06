@@ -532,6 +532,123 @@ Per directive: keep the in-process `SignalBus`; persistence-backed durability is
 the append-only `signals` table beneath it. No distributed bus / LISTEN·NOTIFY /
 Realtime this sprint. Existing `SignalBus` contracts unchanged.
 
+## Sprint 6.6 — Operational Readiness (2026-07-31)
+
+### D-661 · Two workflows: fast credential-free CI, separate manual DB-backed validation
+
+`CommandOS CI` (`ci.yml`) runs lint/typecheck/test/build on every PR + `main` push,
+on Node 22, with **no secrets** (unit suites are in-memory; `npm test` excludes
+`tests/integration/**`). The database-backed release gate stays in the separate,
+**manual** `production-validation.yml`. Rationale: CI must be safe to run on
+untrusted fork PRs and fast enough to require as a status check; production
+validation is expensive, fail-closed, and needs a real database, so it must never
+run automatically on ordinary PRs. The two do not overlap — CI never touches a DB;
+validation never substitutes for the fast gate.
+
+### D-662 · SignalBus deployment decision — Outcome B (bus sufficient; trigger registration is the gap)
+
+Evaluated the in-process `SignalBus` under a multi-instance/serverless model (by
+code inspection — staging measurement pending). Findings:
+
+- **Persistence** subscriber runs synchronously in the emitting request and appends
+  to the durable `SignalEventStore` (Postgres) — needs only same-request fan-out. ✓
+- **Read surfaces** (timeline/list/events/metrics) read from the durable store, not
+  live bus subscriptions — cross-instance safe. ✓
+- **Signal- and schedule-triggered workflows** subscribe to the in-process bus via
+  `TriggerEngine.register()`, which is driven by the activate lifecycle and holds
+  **ephemeral in-process state**. In multi-instance serverless, a signal emitted on
+  instance A only fires a trigger registered on A; a cold-started instance has no
+  registrations. So these triggers are **not reliable** across instances/restarts.
+
+This is **not** a `SignalBus` interface defect — the bus's same-request fan-out plus
+durable persistence is correct. It is that **trigger evaluation is in-process, not
+durable** (related to TD-31's in-process schedule registry). The smallest reliable
+correction is to evaluate triggers **durably** — e.g., the background worker scans
+newly-persisted signals/due schedules and claims+enqueues matching runs — **not** a
+distributed bus. Per directive, no Supabase Realtime / LISTEN·NOTIFY / distributed
+messaging is introduced as future-proofing. Durable trigger evaluation is an
+architectural change that (a) is out of scope for an operational-readiness sprint
+(no new features / no redesign), and (b) cannot be measured without staging.
+**Recorded as TD-36; flagged as a Sprint 7 design decision requiring approval.**
+The `SignalBus` interface is unchanged this sprint.
+
+### D-663 · Staging is an isolated Supabase project + Vercel, durability ON, never production data
+
+Staging = a dedicated, disposable Supabase project (never a production project),
+deployed on Vercel with `USE_SUPABASE_PERSISTENCE=1`, the existing durable adapters,
+and the existing `/api/worker` cron. Service-role and DB credentials are
+server-only Vercel env vars (never `NEXT_PUBLIC_*`). It carries no production
+customer data. Its purpose is to convert "validated in a disposable local stack"
+into "operational on a real hosted deployment" before Sprint 7. See
+[staging.md](./docs/staging.md).
+
+### Sprint 6.6 approvals (2026-08-01)
+
+Confirmed by the product owner:
+
+- **D-661 approved** — CI (`CommandOS CI`) and production-validation stay separate;
+  CI is credential-free and fast, validation is manual/DB-backed.
+- **D-662 / TD-36 approved** — durable signal **and** schedule trigger evaluation
+  will be implemented via the **stateless worker scanning persisted Signals +
+  schedules**. **No** Supabase Realtime / `LISTEN·NOTIFY` / distributed bus. The
+  in-process `SignalBus` stays responsible for synchronous same-request fan-out;
+  **PostgreSQL remains the durable source of truth**. **TD-36 stays open** until the
+  worker-driven implementation is built and verified.
+- **D-663 approved** — staging is an isolated Supabase project + Vercel, durability
+  on, never production data.
+- **Sprint 7 sequencing approved** — Sprint 7 **must begin with durable trigger
+  evaluation**; Intelligence/Decision-Engine features may only follow reliable
+  persisted trigger processing. Order: **durable trigger evaluation → Decision
+  Engine → Insights & Recommendations → Human approval & execution**.
+- **Branch protection approved** — `CommandOS CI` becomes a **required status check**
+  for `main`; PRs must not merge while it is failing or pending; branch protection is
+  not bypassed for routine releases.
+- **Sprint 6.6 remains unreleased** — PR #1 is not merged and `v0.6.6` is not created
+  until staging validation passes.
+
+### D-664 · Durable personal-workspace provisioning (staging-discovered defect, fixed in 6.6)
+
+**Finding (release-blocking, surfaced by the live staging deployment).** The dev
+`PersonalWorkspaceRepository` derives a non-uuid, unpersisted id
+(`personal-${userId}`), but the durable domain tables key `workspace_id` as `uuid`
+with a foreign key to `workspaces(id)`. So with persistence enabled a real
+authenticated user could not create Operations/Agents/Workflows (uuid + FK
+failures). Sprint 6.5's adapter validation missed it by using **seeded** uuid
+workspaces; the first real-auth deployment exposed it. Approved (product owner) as a
+bounded 6.6 fix — **not** deferred to Sprint 7 — because it blocks real users on the
+durable path.
+
+**Design (durable path only; in-memory dev path unchanged).**
+
+- Personal workspaces are **persisted** as real `workspaces` rows (`gen_random_uuid`
+  ids) with an owner `workspace_members` row. Identity is a real uuid resolved by
+  **membership**, never a recomputed application string.
+- One personal workspace per user is enforced by a **partial unique index**
+  `workspaces(owner_id) where kind='personal'`, which also makes concurrent
+  first-request provisioning race-safe (a losing inserter resolves the winner).
+- Provisioning is a single `security definer` RPC
+  `app_provision_personal_workspace(p_user_id, p_name)` — idempotent, atomic
+  (resolve-or-create workspace + owner membership). **Server-only:** execute is
+  revoked from `public`, `anon`, and `authenticated` and granted only to
+  `service_role`; it is called with a **trusted** user id from the server session,
+  so it is never client-controlled and cannot provision for another user.
+- `workspaceRepository` is persistence-gated (`SupabaseWorkspaceRepository` when
+  enabled, else the unchanged `PersonalWorkspaceRepository`). Resolution is by
+  membership, forward-compatible with team workspaces (`kind='team'`, `owner_id`
+  null, many members) — no assumption that every workspace is personal.
+
+**Security (verified by tests + staging).** anon/authenticated cannot execute the
+RPC or insert workspace/membership rows; a user cannot resolve another user's
+workspace; ids can't be client-injected; tenant isolation holds. The
+anon-execute hole (Supabase default-privileges grant execute to anon on new public
+functions) was itself **caught by the hosted validation** and fixed with an
+explicit revoke.
+
+**Evidence.** Hosted validation PASS (36/36, incl. 7 provisioning tests) against the
+real staging project; live real-user smoke: sign-in provisioned a uuid workspace +
+owner membership, Operations/Agents/Workflows created and persisted, survived a
+redeploy, and a second user was fully isolated. Not left as open debt.
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:

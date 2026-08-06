@@ -67,3 +67,7 @@ The durable worker's leasing, crash recovery, bounded retries, and idempotency
 are exercised against a real database by the integration suites in
 `tests/integration/{worker,concurrency,recovery}.test.ts`, part of the Sprint 6.5
 release gate — see [production-validation.md](./production-validation.md).
+
+## Deployment & cron verification
+
+The Vercel Cron `* * * * * → /api/worker` setup, the authorized/rejected tick checks, and heartbeat/lease-recovery verification are documented in [deployment.md](./deployment.md#worker--cron-verification) and the staging checklist in [staging.md](./staging.md#step-6--worker--cron-validation).

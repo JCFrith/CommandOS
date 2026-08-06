@@ -11,6 +11,73 @@ this file is the terse, versioned log.
 
 _Nothing yet._
 
+## [0.6.6] — 2026-08-05
+
+Sprint 6.6 — **Operational Readiness**. Closes the two highest-leverage gaps from the
+post-v0.6.5 health assessment — continuous CI and a **validated** staging path — with
+**no new product features** and no architecture redesign, plus a bounded fix for a
+release-blocking durable-path defect that the live staging deployment surfaced.
+
+### Added
+
+- **`CommandOS CI`** (`.github/workflows/ci.yml`): lint · typecheck · test · build on
+  every PR + `main` push and manual dispatch. Node 22, `npm ci` + cache, concurrency
+  cancellation, least-privilege `contents: read`, 20-min timeout, failure-log
+  artifacts. **No Supabase/production credentials** (unit suites are in-memory;
+  `npm test` excludes `tests/integration/**`). Verified green on GitHub.
+- **Staging + deployment playbooks**: `docs/staging.md` (isolated Supabase project +
+  Vercel, `USE_SUPABASE_PERSISTENCE=1`, hosted-validation + full smoke/worker
+  checklist, cleanup), `docs/deployment.md` (environment matrix, canonical env-var
+  reference, deploy/rollback, adapter + worker verification, production-readiness
+  checklist), `docs/ci.md` (CI behavior + branch-protection status-check setup).
+- **Operational visibility mapping + security review** in `docs/operations-runbook.md`
+  (existing Health/Queue/Signals surfaces cover deployment/worker/db/queue-depth/
+  oldest-job/heartbeat-age/failed/expired-lease/provider/overall; external alerting
+  documented as a known limitation, notification framework unchanged).
+
+### Decisions
+
+- **D-661** — CI and production-validation are separate workflows (fast/credential-free
+  vs manual/DB-backed). **D-662** — SignalBus deployment decision: the in-process bus
+  is sufficient (durable persistence + durable reads); signal/schedule workflow
+  triggers rely on ephemeral in-process registration → a correctness gap under
+  multi-instance serverless (**TD-36**), fixed by durable trigger evaluation (Sprint 7
+  design), **not** a distributed bus. **D-663** — staging = isolated Supabase + Vercel,
+  durability on, never production data.
+
+### Fixed (staging-discovered, release-blocking)
+
+- **Durable personal-workspace provisioning (D-664).** With persistence enabled, a
+  real authenticated user could not create Operations/Agents/Workflows: the app
+  derived a non-uuid, unpersisted workspace id (`personal-<id>`) incompatible with
+  the durable schema's `uuid workspace_id` + FK to `workspaces(id)`. The live
+  deployment (first real auth against the durable schema) surfaced it; 6.5's
+  seeded-workspace validation had masked it. Fix: persist real uuid workspaces +
+  owner memberships via an idempotent, concurrency-safe, **server-only** RPC
+  (`app_provision_personal_workspace`; partial unique index enforces one personal
+  workspace/user); `SupabaseWorkspaceRepository` behind the persistence gate;
+  in-memory dev path unchanged. Execute revoked from `public`/`anon`/`authenticated`
+  (an anon-execute hole was itself caught by the hosted validation). 7 net-new
+  integration tests; the smoke binding-check now covers `WorkspaceRepository`.
+
+### Tech debt
+
+- Revised **TD-03** (unit-gate CI now exists + green; Playwright browser E2E still not
+  automated — kept open). Added **TD-36** (durable workflow-trigger evaluation).
+  TD-02/09/31/35 remain open (no supporting evidence to close). The workspace defect
+  above is **fixed + validated**, not left as debt.
+
+> **Validated — ready to release.** `CommandOS CI` green; hosted production
+> validation **PASS** against a real isolated staging Supabase project (Postgres
+> 17.6): 36/36 tests, 0 skipped, migration rollback/replay + EXPLAIN captured. Live
+> Vercel staging deploy (`USE_SUPABASE_PERSISTENCE=1`) passed the full real-user
+> smoke: durable adapters (no in-memory fallback), auth guard, real-user uuid
+> workspace provisioning + owner membership, Operations/Agents/Workflows create +
+> persist, survival across separate requests and a redeployment, and cross-user
+> isolation. Worker validated manually (authorized tick claims/heartbeats; 401
+> without the secret); the every-minute cron is a documented Hobby-plan limitation
+> (staging uses a daily cadence on a deploy-only branch; production keeps `* * * * *`).
+
 ## [0.6.5] — 2026-07-31
 
 Sprint 6.5 — **Production Foundation**. Production-capable Postgres persistence +

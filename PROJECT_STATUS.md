@@ -1,8 +1,26 @@
 # PROJECT_STATUS
 
-_Last updated at the Sprint 6.5 — Production Foundation release (`v0.6.5`)._
+_Last updated at the Sprint 6.6 — Operational Readiness release (`v0.6.6`)._
 
 ## Current Sprint
+
+**Sprint 6.6 — Operational Readiness** ✅ complete — **validated on a live staging
+deployment, merged to `main`, tagged `v0.6.6`**. Closes the two highest-leverage
+post-v0.6.5 gaps plus a release-blocking defect staging surfaced. Delivered:
+`CommandOS CI` (lint/typecheck/test/build on every PR + `main`, Node 22, no
+secrets, **green**); the SignalBus deployment decision (D-662 → TD-36), security
+review, and operational-visibility mapping; the CI/deployment/staging playbooks.
+An **isolated Supabase staging project + Vercel deploy** (`USE_SUPABASE_PERSISTENCE=1`)
+was provisioned and passed **hosted production validation** (36/36) and the full
+**real-user smoke** (durable adapters, uuid workspace provisioning, Operations/
+Agents/Workflows persistence, redeploy survival, cross-user isolation, manual
+worker validation). Staging surfaced — and this sprint **fixed** — a release-blocking
+durable-path defect: real users now get **persisted uuid workspaces + owner
+memberships** via a server-only, idempotent, concurrency-safe provisioning RPC
+(D-664), so Operations/Agents/Workflows function end-to-end with persistence
+enabled. Branch protection (require `CommandOS CI` on `main`) is approved and
+pending a repo-admin toggle. See `docs/ci.md`, `docs/staging.md`,
+`docs/deployment.md`, `docs/persistence.md`, `docs/supabase.md`.
 
 **Sprint 6.5 — Production Foundation** ✅ complete — **validated against real
 PostgreSQL, merged to `main`, tagged `v0.6.5`**. Production Postgres persistence +

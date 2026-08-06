@@ -155,3 +155,7 @@ Only once a live run reports `PASS` with **zero required skips**:
    the annotated tag `v0.6.5`.
 
 Until that live `PASS` report exists, Sprint 6.5 remains unreleased.
+
+## Running against staging (hosted mode)
+
+To rehearse the durable deployment, run this gate in **hosted** mode against an isolated Supabase **staging** project before deploying — see [staging.md](./staging.md). CI (the fast, credential-free unit gate) is separate; see [ci.md](./ci.md).

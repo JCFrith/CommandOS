@@ -1,0 +1,67 @@
+name: CommandOS CI
+
+# Fast, non-destructive quality gate for every change. Runs the definition-of-done
+# gates (lint, typecheck, unit tests, build) on Node 22 with the lockfile. It needs
+# NO Supabase or production credentials — the unit suites run entirely in-memory and
+# the DB-backed integration suites live under tests/integration/ and are excluded
+# from `npm test` (they only run in the separate, manual production-validation
+# workflow). This workflow is safe to require as a branch-protection status check.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Superseded runs on the same ref are cancelled (a new push to a PR cancels the old
+# run). main pushes use a per-sha group so releases are never cancelled by a peer.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the repository. No write/secrets scopes,
+# so a pull_request from a fork cannot exfiltrate anything or mutate the repo.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (locked, no scripts from deps)
+        run: npm ci
+
+      # Each gate tees its output to ci-logs/ (GitHub bash runs with pipefail, so a
+      # failing command still fails the step) and none is allowed to be skipped.
+      - name: Lint
+        run: mkdir -p ci-logs && npm run lint 2>&1 | tee ci-logs/lint.log
+
+      - name: Typecheck
+        run: npm run typecheck 2>&1 | tee ci-logs/typecheck.log
+
+      - name: Test
+        run: npm test 2>&1 | tee ci-logs/test.log
+
+      - name: Build
+        run: npm run build 2>&1 | tee ci-logs/build.log
+
+      # On failure, publish the captured logs so the break is diagnosable without
+      # re-running. No secrets are ever written to these logs.
+      - name: Upload CI logs on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-${{ github.run_id }}
+          path: ci-logs/
+          if-no-files-found: warn
+          retention-days: 14
