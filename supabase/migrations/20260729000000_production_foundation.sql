@@ -396,6 +396,20 @@ create table if not exists schedule_occurrences (
   primary key (workspace_id, workflow_id, occurrence_key)
 );
 
+-- Durable trigger-scan progress (Sprint 7 Phase 1). One row per workspace marks how
+-- far the worker has scanned `signals` for signal-trigger evaluation. It is a
+-- progress marker / optimization, NOT the deduplication mechanism — `trigger_claims`
+-- is authoritative (D-665). Advancement is monotonic (`created_at ASC, id ASC`), so
+-- concurrent scans are redundant but never lose work.
+create table if not exists trigger_scan_cursor (
+  workspace_id uuid primary key,
+  last_signal_created_at timestamptz not null default 'epoch',
+  last_signal_id uuid,
+  updated_at timestamptz not null default now()
+);
+-- Ordered signal scan for trigger evaluation: workspace-scoped, (created_at, id) ASC.
+create index if not exists idx_signals_scan on signals (workspace_id, created_at, id);
+
 -- Durable job queue with leasing.
 create table if not exists jobs (
   id uuid primary key default gen_random_uuid(),
@@ -538,7 +552,7 @@ create policy p_workspaces on workspaces for select using (app_is_member(id));
 do $$
 declare t text;
 begin
-  foreach t in array array['jobs','trigger_claims','schedule_occurrences','signal_subscriptions']
+  foreach t in array array['jobs','trigger_claims','schedule_occurrences','signal_subscriptions','trigger_scan_cursor']
   loop
     execute format('alter table %I enable row level security', t);
   end loop;

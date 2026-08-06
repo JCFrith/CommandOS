@@ -9,6 +9,7 @@ drop table if exists workflow_runs cascade;
 drop table if exists workflow_versions cascade;
 drop table if exists workflows cascade;
 drop table if exists schedule_occurrences cascade;
+drop table if exists trigger_scan_cursor cascade;
 drop table if exists trigger_claims cascade;
 drop table if exists jobs cascade;
 drop table if exists signal_events cascade;
