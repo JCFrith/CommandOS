@@ -3,6 +3,17 @@ import type { SignalPublisher } from '@/lib/signals/bus';
 import { createSignal, type SignalDeps } from '@/lib/signals/signal';
 import { rootCorrelation } from '@/lib/platform/correlation';
 
+/**
+ * A worker "pass" — a unit of pre-claim work run once per tick between lease
+ * reclamation and job claiming (e.g. durable trigger evaluation, which enqueues
+ * the very jobs the same tick then claims). Passes are failure-isolated: a
+ * throwing pass never prevents queued jobs from being drained.
+ */
+export interface WorkerPass {
+  readonly name: string;
+  run(): Promise<void>;
+}
+
 export interface WorkerDeps extends SignalDeps {
   /** Stable id for this worker instance (audit + lease ownership). */
   workerId: string;
@@ -11,6 +22,13 @@ export interface WorkerDeps extends SignalDeps {
   /** Max jobs drained per tick. */
   batchSize: number;
   publisher?: SignalPublisher;
+  /**
+   * Pre-claim passes run (in order) after reclaim and before claim, each isolated
+   * so one failing pass cannot block unrelated queued work. Empty in the in-memory
+   * dev path (triggers fire in-process via the {@link SignalBus}); populated in the
+   * durable path with the signal-trigger evaluation.
+   */
+  passes?: WorkerPass[];
 }
 
 export interface TickResult {
@@ -18,6 +36,9 @@ export interface TickResult {
   completed: number;
   failed: number;
   reclaimed: number;
+  /** Pre-claim passes that ran this tick and how many threw (failure-isolated). */
+  passesRun: number;
+  passesFailed: number;
 }
 
 /** The reserved workspace for worker-level (non-tenant) signals. */
@@ -59,6 +80,23 @@ export class LeasedBackgroundWorker implements BackgroundWorker {
   async tick(): Promise<TickResult> {
     const now = this.deps.now();
     const reclaimed = await this.store.reclaimExpired(now);
+
+    // Pre-claim passes (e.g. durable trigger evaluation) run after reclaim and
+    // before claim so any jobs they enqueue are drained this same tick. Each is
+    // failure-isolated: a throwing pass is logged and skipped, never blocking the
+    // queued-job drain below.
+    let passesRun = 0;
+    let passesFailed = 0;
+    for (const pass of this.deps.passes ?? []) {
+      passesRun += 1;
+      try {
+        await pass.run();
+      } catch {
+        passesFailed += 1;
+        await this.emitPassFailure(pass.name);
+      }
+    }
+
     const claimed = await this.store.claimDue(
       this.deps.workerId,
       this.deps.leaseMs,
@@ -89,8 +127,41 @@ export class LeasedBackgroundWorker implements BackgroundWorker {
       }
     }
 
-    await this.emitHeartbeat(now, { claimed: claimed.length, completed, failed, reclaimed });
-    return { claimed: claimed.length, completed, failed, reclaimed };
+    const result: TickResult = {
+      claimed: claimed.length,
+      completed,
+      failed,
+      reclaimed,
+      passesRun,
+      passesFailed,
+    };
+    await this.emitHeartbeat(now, result);
+    return result;
+  }
+
+  /** Best-effort worker-level signal that a pre-claim pass threw (never rethrows). */
+  private async emitPassFailure(passName: string): Promise<void> {
+    if (!this.deps.publisher) return;
+    try {
+      await this.deps.publisher.publish(
+        createSignal(
+          {
+            type: 'worker.pass.failed',
+            workspaceId: SYSTEM_WS,
+            correlation: rootCorrelation(this.deps.id()),
+            actorId: this.deps.workerId,
+            actorName: null,
+            summary: `worker pass failed: ${passName}`,
+            severity: 'error',
+            source: 'runtime',
+            payload: { pass: passName },
+          },
+          this.deps,
+        ),
+      );
+    } catch {
+      /* observability must never break the worker */
+    }
   }
 
   private async emitJob(job: Job, type: string, severity: 'trace' | 'error'): Promise<void> {

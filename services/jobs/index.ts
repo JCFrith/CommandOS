@@ -2,9 +2,10 @@ import { isSupabasePersistenceEnabled } from '@/lib/env';
 import { signalPublisher } from '@/lib/signals';
 import type { LeasedJobStore } from '@/lib/platform/background';
 import { InMemoryLeasedJobStore } from './in-memory-job-store';
-import { LeasedBackgroundWorker } from './worker';
-// Type-only (erased) so the server-only adapter stays out of the dev bundle.
+import { LeasedBackgroundWorker, type WorkerPass } from './worker';
+// Type-only (erased) so the server-only adapters stay out of the dev bundle.
 import type * as SupabaseJobStoreModule from './supabase-job-store';
+import type * as WorkflowDurableModule from './workflow-durable';
 
 /**
  * The wired durable-execution singletons.
@@ -37,6 +38,33 @@ function buildStore(): LeasedJobStore {
 export const jobStore: LeasedJobStore = globalForJobs.__jobStore ?? buildStore();
 globalForJobs.__jobStore = jobStore;
 
+/**
+ * How workflow triggers are evaluated in this runtime:
+ * - `durable`: the worker scans persisted Signals each tick and enqueues
+ *   `workflow.run` jobs (crash-safe, multi-instance — Sprint 7 D-666).
+ * - `in-memory`: the in-process {@link TriggerEngine} fires runs synchronously
+ *   from the {@link SignalBus} (dev / unconfigured; unchanged behaviour).
+ *
+ * Exported so a diagnostics endpoint / the worker heartbeat can surface the
+ * active path without leaking configuration.
+ */
+export const workflowTriggerPath: 'durable' | 'in-memory' = isSupabasePersistenceEnabled()
+  ? 'durable'
+  : 'in-memory';
+
+/**
+ * The durable trigger evaluation pass + `workflow.run` handler, lazily required
+ * only when persistence is enabled (keeps `server-only` out of the dev bundle).
+ * In the in-memory path this is empty and no handler is registered — triggered
+ * runs execute in-process through the {@link TriggerEngine} as before.
+ */
+const durablePasses: WorkerPass[] = [];
+if (workflowTriggerPath === 'durable') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('@/services/jobs/workflow-durable') as typeof WorkflowDurableModule;
+  durablePasses.push(mod.buildDurableTriggerPass());
+}
+
 /** The shared stateless worker (driven by the cron endpoint). */
 export const backgroundWorker = new LeasedBackgroundWorker(jobStore, {
   id: () => crypto.randomUUID(),
@@ -45,4 +73,11 @@ export const backgroundWorker = new LeasedBackgroundWorker(jobStore, {
   leaseMs: 60_000,
   batchSize: 20,
   publisher: signalPublisher,
+  passes: durablePasses,
 });
+
+if (workflowTriggerPath === 'durable') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('@/services/jobs/workflow-durable') as typeof WorkflowDurableModule;
+  backgroundWorker.register(mod.workflowRunHandler);
+}
