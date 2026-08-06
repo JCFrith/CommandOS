@@ -161,3 +161,11 @@ Reviewed for the CI + staging deployment path; findings:
 
 No secrets are exposed to untrusted pull-request code. Branch protection (requiring
 `CommandOS CI`) is a repo-admin setting — see [ci.md](./ci.md).
+
+## Workspace provisioning
+
+Real authenticated users get a persisted uuid personal workspace + owner membership
+on first sign-in (server-only `app_provision_personal_workspace` RPC; idempotent,
+concurrency-safe). If a durable deployment shows workspace/FK errors on create,
+confirm the migration applied `owner_id` + the RPC and that the service role can
+execute it. See [persistence.md](./persistence.md) / D-664.

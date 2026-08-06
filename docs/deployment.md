@@ -129,3 +129,12 @@ Before promoting the durable path to real users, all of these must hold:
 Until every box is checked against a **real** deployment, treat production as
 **not ready** — the durable path is validated in a disposable stack and rehearsed in
 staging, not yet proven for production traffic.
+
+## Workspace provisioning (durable mode)
+
+On the first authenticated request in durable mode, the app provisions the user's
+personal workspace (a uuid `workspaces` row + owner membership) server-side via the
+`app_provision_personal_workspace` RPC — no operator action required. Verify after a
+deploy by signing in and confirming a `personal` `workspaces` row (uuid `id`,
+`owner_id` = the user) plus an `owner` `workspace_members` row appear. See
+[persistence.md](./persistence.md) and [staging.md](./staging.md).

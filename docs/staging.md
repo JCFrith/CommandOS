@@ -161,3 +161,34 @@ Never leave a staging service-role key or DB URL in a shared location after tear
 Record the hosted-validation `summary.md` + smoke results in
 [production-validation.md](./production-validation.md) and PROJECT_STATUS, then
 proceed to the v0.6.6 release gates in the operational-readiness release procedure.
+
+## Real-user smoke — results (2026-08-05)
+
+Executed against the live Vercel Hobby staging deployment
+(`https://commandos-staging.vercel.app`) backed by the isolated
+`commandos-staging` Supabase project (Postgres 17.6), `USE_SUPABASE_PERSISTENCE=1`:
+
+- **Durable adapters active (no in-memory fallback):** an authorized worker tick
+  claimed real jobs from the Supabase `jobs` table; jobs/signals persist.
+- **Auth guard:** `POST /api/worker` → `401` without/with a wrong `CRON_SECRET`;
+  `200` + tick summary with the correct one.
+- **Real-user workspace provisioning:** signing in provisioned a **uuid** `workspaces`
+  row (`kind='personal'`, `owner_id` = the user) + an `owner` `workspace_members`
+  row — the fix for the release-blocking defect (D-664).
+- **Domain data:** Operations, Agents, and Workflows created in the app and persisted
+  to Supabase with the provisioned `workspace_id`.
+- **Persistence:** records survived a **separate request** and a **redeployment**.
+- **Cross-user isolation:** a second authenticated user saw an empty console — none of
+  the first user's records — and received its own separate personal workspace.
+
+**Hosted production validation:** PASS, 36/36 (incl. 7 workspace-provisioning tests),
+0 skipped; migration rollback/replay + 14 EXPLAIN plans captured.
+
+### Cron cadence — documented Hobby limitation
+
+Vercel Hobby rejects the every-minute cron. Staging deploys from a **deploy-only
+`staging` branch** carrying a daily `0 0 * * *` cron (Hobby-legal); the release
+branch keeps `* * * * *` for production (Pro). The worker was validated **manually**
+(authorized `POST /api/worker`) — no test weakened. Automatic every-minute cadence
+on staging requires Pro or an external scheduler; tracked as a plan limitation, not
+an app defect.

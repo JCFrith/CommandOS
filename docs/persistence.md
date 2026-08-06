@@ -67,3 +67,26 @@ same contract suites run against both the in-memory and Supabase adapters. See
 ## Staging & deployment
 
 Running the durable path on a real hosted deployment (isolated Supabase staging + Vercel, `USE_SUPABASE_PERSISTENCE=1`) — including how to verify the active adapters are Supabase-backed and not in-memory — is documented in [staging.md](./staging.md) and [deployment.md](./deployment.md).
+
+## Personal-workspace provisioning (durable path)
+
+Domain tables (`operations`, `agents`, `workflows`, …) key `workspace_id` as `uuid`
+with a foreign key to `workspaces(id)`, so a real authenticated user needs a
+**persisted** workspace before they can create anything with persistence enabled.
+
+- **Identity:** a real `gen_random_uuid()` workspace row (never the dev
+  `personal-<id>` string), resolved by **membership**.
+- **One personal workspace per user:** a partial unique index
+  `workspaces(owner_id) where kind = 'personal'` enforces it and makes concurrent
+  first-request provisioning race-safe (a losing inserter resolves the winner).
+- **Provisioning:** the `security definer` RPC
+  `app_provision_personal_workspace(p_user_id, p_name)` atomically resolves-or-creates
+  the workspace + an `owner` `workspace_members` row. It is **server-only** —
+  `execute` is revoked from `public`/`anon`/`authenticated` and granted only to
+  `service_role`, and it is called with a **trusted** user id from the server
+  session, so it can never be client-driven or provision for another user.
+- **Gating:** `workspaceRepository` is `SupabaseWorkspaceRepository` when persistence
+  is enabled, else the unchanged in-memory `PersonalWorkspaceRepository`.
+- **Team-ready:** resolution is by membership; `kind='team'` workspaces (many
+  members, `owner_id` null) are unaffected — no assumption that every workspace is
+  personal. See [D-664](../DECISIONS.md).

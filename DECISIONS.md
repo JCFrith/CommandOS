@@ -606,6 +606,49 @@ Confirmed by the product owner:
 - **Sprint 6.6 remains unreleased** — PR #1 is not merged and `v0.6.6` is not created
   until staging validation passes.
 
+### D-664 · Durable personal-workspace provisioning (staging-discovered defect, fixed in 6.6)
+
+**Finding (release-blocking, surfaced by the live staging deployment).** The dev
+`PersonalWorkspaceRepository` derives a non-uuid, unpersisted id
+(`personal-${userId}`), but the durable domain tables key `workspace_id` as `uuid`
+with a foreign key to `workspaces(id)`. So with persistence enabled a real
+authenticated user could not create Operations/Agents/Workflows (uuid + FK
+failures). Sprint 6.5's adapter validation missed it by using **seeded** uuid
+workspaces; the first real-auth deployment exposed it. Approved (product owner) as a
+bounded 6.6 fix — **not** deferred to Sprint 7 — because it blocks real users on the
+durable path.
+
+**Design (durable path only; in-memory dev path unchanged).**
+
+- Personal workspaces are **persisted** as real `workspaces` rows (`gen_random_uuid`
+  ids) with an owner `workspace_members` row. Identity is a real uuid resolved by
+  **membership**, never a recomputed application string.
+- One personal workspace per user is enforced by a **partial unique index**
+  `workspaces(owner_id) where kind='personal'`, which also makes concurrent
+  first-request provisioning race-safe (a losing inserter resolves the winner).
+- Provisioning is a single `security definer` RPC
+  `app_provision_personal_workspace(p_user_id, p_name)` — idempotent, atomic
+  (resolve-or-create workspace + owner membership). **Server-only:** execute is
+  revoked from `public`, `anon`, and `authenticated` and granted only to
+  `service_role`; it is called with a **trusted** user id from the server session,
+  so it is never client-controlled and cannot provision for another user.
+- `workspaceRepository` is persistence-gated (`SupabaseWorkspaceRepository` when
+  enabled, else the unchanged `PersonalWorkspaceRepository`). Resolution is by
+  membership, forward-compatible with team workspaces (`kind='team'`, `owner_id`
+  null, many members) — no assumption that every workspace is personal.
+
+**Security (verified by tests + staging).** anon/authenticated cannot execute the
+RPC or insert workspace/membership rows; a user cannot resolve another user's
+workspace; ids can't be client-injected; tenant isolation holds. The
+anon-execute hole (Supabase default-privileges grant execute to anon on new public
+functions) was itself **caught by the hosted validation** and fixed with an
+explicit revoke.
+
+**Evidence.** Hosted validation PASS (36/36, incl. 7 provisioning tests) against the
+real staging project; live real-user smoke: sign-in provisioned a uuid workspace +
+owner membership, Operations/Agents/Workflows created and persisted, survived a
+redeploy, and a second user was fully isolated. Not left as open debt.
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:
