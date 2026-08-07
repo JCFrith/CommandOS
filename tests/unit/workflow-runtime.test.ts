@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryWorkflowRepository } from '@/services/workflows/in-memory-workflow-repository';
 import { WorkflowRuntime } from '@/lib/workflows/runtime/runtime';
@@ -244,8 +244,13 @@ describe('WorkflowRuntime — delay suspends on a timer', () => {
       ],
       's',
     );
+    const createTimer = vi.spyOn(repo, 'createTimer');
     const run = await runtimeWith().start(v, newRun(), ctx);
     expect(run.status).toBe('waiting_timer');
+    // A durable timer is persisted (run + node + due time) so the worker can resume.
+    expect(createTimer).toHaveBeenCalledTimes(1);
+    expect(createTimer.mock.calls[0]![0]).toMatchObject({ runId: run.id, nodeId: 'd' });
+    expect(typeof createTimer.mock.calls[0]![0].dueAt).toBe('string');
   });
 });
 

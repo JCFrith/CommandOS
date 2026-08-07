@@ -31,6 +31,8 @@
     "test:integration:rls": "vitest run -c vitest.integration.config.ts tests/integration/rls.test.ts",
     "test:integration:concurrency": "vitest run -c vitest.integration.config.ts tests/integration/concurrency.test.ts",
     "test:integration:recovery": "vitest run -c vitest.integration.config.ts tests/integration/recovery.test.ts",
+    "test:integration:durable-triggers": "vitest run -c vitest.integration.config.ts tests/integration/durable-triggers.test.ts",
+    "test:integration:durable-resume": "vitest run -c vitest.integration.config.ts tests/integration/durable-resume.test.ts",
     "test:performance:database": "node scripts/validation/explain-plans.mjs",
     "test:production:smoke": "vitest run -c vitest.integration.config.ts tests/integration/production-smoke.test.ts",
     "validate:production": "node scripts/validation/run-all.mjs",
