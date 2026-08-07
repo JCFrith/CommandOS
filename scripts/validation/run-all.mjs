@@ -45,18 +45,24 @@ function step(label, bin, args, opts = {}) {
 // 1. Fail-closed environment + schema probe.
 step('validate-env', 'node', ['scripts/validation/validate-env.mjs']);
 
-// 2. Migration reversibility: capture canonical → rollback → replay → compare.
-step('migrate:rollback', 'node', ['scripts/validation/migrate.mjs', 'rollback']);
-step('migrate:replay', 'node', ['scripts/validation/migrate.mjs', 'replay']);
+// 2. Migration-chain reversibility (A–D): the latest migration rolls back to the
+//    released base schema and the full chain replays deterministically. Leaves the
+//    DB fully migrated at the latest (Sprint 7) schema.
+step('migrate:verify', 'node', ['scripts/validation/migrate.mjs', 'verify']);
 
-// 3. Re-apply the validation-only helpers dropped by the rollback/replay cycle.
+// 3. Re-apply the validation-only helpers (the rollback/replay cycle truncated
+//    the DB; re-create them fresh and re-seed on next resetDb()).
 step('apply validation helpers', 'psql', [
   process.env.SUPABASE_TEST_DB_URL,
   '-v', 'ON_ERROR_STOP=1',
   '-f', 'supabase/validation/reset.sql',
 ]);
 
-// 4. Database-backed integration suites (single vitest run, JSON + console).
+// 4. SQL privilege assertions: prove the replayed grant state matches the expected
+//    matrix for every privileged RPC + infra table (fail-closed on any violation).
+step('privilege assertions', 'node', ['scripts/validation/privileges.mjs']);
+
+// 5. Database-backed integration suites (single vitest run, JSON + console).
 //    These MUST NOT be skipped in production-validation mode; report.mjs fails the
 //    gate if any required test is skipped.
 step('integration suites', 'npx', [
@@ -65,12 +71,12 @@ step('integration suites', 'npx', [
   `--outputFile=${join(TEST_RESULTS, 'integration.json')}`,
 ]);
 
-// 5. Performance fixtures + EXPLAIN plans (after the functional suites, which reset
+// 6. Performance fixtures + EXPLAIN plans (after the functional suites, which reset
 //    the DB; fixtures are bulk perf data left in place for plan capture).
 step('generate fixtures', 'node', ['scripts/validation/gen-fixtures.mjs']);
 step('explain plans', 'node', ['scripts/validation/explain-plans.mjs']);
 
-// 6. Aggregate + compute the release gate (exits non-zero on FAIL).
+// 7. Aggregate + compute the release gate (exits non-zero on FAIL).
 console.log('\n=== report + release gate ===');
 const report = spawnSync('node', ['scripts/validation/report.mjs'], { stdio: 'inherit', env: process.env });
 process.exit(report.status ?? 1);
