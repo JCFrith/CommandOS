@@ -15,6 +15,7 @@ const ART = join(resolve(process.cwd()), 'artifacts', 'production-validation');
 const TEST_RESULTS = join(ART, 'test-results');
 const PLANS = join(ART, 'query-plans');
 const MIGRATION_LOGS = join(ART, 'migration-logs');
+const PRIVILEGES = join(ART, 'privileges');
 mkdirSync(ART, { recursive: true });
 
 const safe = (fn, fallback) => {
@@ -66,6 +67,18 @@ const migration = {
 };
 migration.ok = migration.canonicalCaptured && migration.replayCaptured && !migration.schemaDiff;
 
+// ---- Privilege assertions -----------------------------------------------------
+const privResult = safe(
+  () => JSON.parse(readFileSync(join(PRIVILEGES, 'privileges.json'), 'utf8')),
+  null,
+);
+const privileges = {
+  present: privResult !== null,
+  ok: privResult?.ok === true,
+  violations: privResult?.violations ?? [],
+  checks: privResult?.checks?.length ?? 0,
+};
+
 // ---- Query plans --------------------------------------------------------------
 const planFiles = safe(() => readdirSync(PLANS).filter((f) => f.endsWith('.txt')), []);
 const planSummary = safe(
@@ -84,6 +97,7 @@ const gate = {
   zeroFailures: tests.present && tests.failed === 0,
   zeroRequiredSkips: tests.present && tests.skipped === 0,
   migrationsReversible: migration.ok,
+  privilegesEnforced: privileges.present && privileges.ok,
   queryPlansCaptured: plans.captured > 0 && plans.failures.length === 0,
 };
 gate.pass =
@@ -92,9 +106,10 @@ gate.pass =
   gate.zeroFailures &&
   gate.zeroRequiredSkips &&
   gate.migrationsReversible &&
+  gate.privilegesEnforced &&
   gate.queryPlansCaptured;
 
-const summary = { releaseGate: gate.pass ? 'PASS' : 'FAIL', env, gate, tests, migration, plans };
+const summary = { releaseGate: gate.pass ? 'PASS' : 'FAIL', env, gate, tests, migration, privileges, plans };
 writeFileSync(join(ART, 'summary.json'), JSON.stringify(summary, null, 2));
 
 // ---- Human-readable -----------------------------------------------------------
@@ -116,6 +131,7 @@ const md = `# Production Validation Report
 | Zero required test failures | ${check(gate.zeroFailures)} |
 | Zero required test skips | ${check(gate.zeroRequiredSkips)} |
 | Migration rollback + replay reproduces canonical schema | ${check(gate.migrationsReversible)} |
+| Privilege matrix enforced (every privileged RPC + infra table) | ${check(gate.privilegesEnforced)} |
 | Query plans captured (no EXPLAIN failures) | ${check(gate.queryPlansCaptured)} |
 
 ## Integration tests
@@ -127,6 +143,10 @@ ${tests.files.map((f) => `  - ${check(f.status !== 'failed' && f.skipped === 0)}
 - Canonical schema captured: ${check(migration.canonicalCaptured)}
 - Replay captured: ${check(migration.replayCaptured)}
 - Schema drift after replay: ${migration.schemaDiff ? '❌ drift detected (see schema.diff.txt)' : '✅ none'}
+
+## Privilege assertions
+- Assertions run: ${privileges.checks} · Result: ${privileges.present ? (privileges.ok ? '✅ all enforced' : '❌ violations') : '❌ not run'}
+${privileges.violations.length ? privileges.violations.map((v) => `  - ❌ ${v}`).join('\n') : '  - No violations'}
 
 ## Performance (query plans)
 - Plans captured: ${plans.captured}
