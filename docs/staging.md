@@ -192,3 +192,30 @@ branch keeps `* * * * *` for production (Pro). The worker was validated **manual
 (authorized `POST /api/worker`) — no test weakened. Automatic every-minute cadence
 on staging requires Pro or an external scheduler; tracked as a plan limitation, not
 an app defect.
+
+## Durable trigger/schedule/timer/approval staging smoke (Sprint 7)
+
+Run against the deployed staging app (durable mode). Because Vercel Hobby cron is
+daily, the worker is driven **manually** via authorized `POST /api/worker`; this is
+a cadence limitation, not a correctness gap (the tick logic is identical).
+
+1. **Signal** — emit a matching signal for an active signal-triggered workflow;
+   invoke the worker; confirm **exactly one** run executes; invoke again → **no
+   duplicate**.
+2. **Schedule** — activate a scheduled workflow; wait past one interval; invoke the
+   worker; confirm exactly one run; invoke again → no duplicate (occurrence dedup).
+3. **Timer** — run a workflow with a `delay`; confirm it suspends (`waiting_timer`)
+   and a `workflow_timers` row exists; once due, invoke the worker; confirm the run
+   resumes **exactly once**.
+4. **Approval** — run a workflow with an approval; confirm it suspends; approve
+   through the deployed app; confirm the **HTTP request did not execute the
+   workflow** (still `waiting_approval`, a `workflow.resume` job is queued); invoke
+   the worker; confirm it resumes exactly once; approve again → no duplicate resume.
+5. Validate all three resume paths survive a **redeploy / cold start** (persisted
+   runs/timers/approvals resume after the worker runs post-redeploy).
+6. Confirm a **second workspace** cannot receive or resume the first workspace's
+   work, and that **no in-process `TriggerEngine` registration** is required
+   (`GET /api/worker/health` → `mode: 'durable'`).
+
+Verify health with `GET /api/worker/health` (CRON_SECRET) — overdue timers, resume
+queue depth, per-pass liveness. Full design: [durable-triggers.md](./durable-triggers.md).

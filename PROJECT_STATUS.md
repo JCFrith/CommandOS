@@ -5,13 +5,20 @@ _Last updated at the start of Sprint 7 Phase 1 (durable triggers), on `sprint-7-
 ## Current Sprint
 
 **Sprint 7 — Intelligence & Decision Engine** 🚧 **Phase 1 — Durable Trigger
-Evaluation** in progress on `sprint-7-durable-triggers` (targets `v0.7.0`). Replaces
-instance-local workflow trigger evaluation with durable, worker-driven evaluation
-over persisted Signals, schedules, timers, and trigger claims via the existing
-`LeasedJobStore` — resolving TD-36 (and materially reducing TD-31). No distributed
-bus/Realtime; latency bounded by worker cadence (D-665..D-668). Decision Engine,
-Insights, and Intelligence UI are **not** started (blocked on Phase 1 staging
-validation). Plan: `docs/sprint-7-plan.md`.
+Evaluation** implemented on `sprint-7-durable-triggers` (targets `v0.7.0`; **not
+merged/tagged — pending hosted-staging validation**, the one remaining gate).
+Replaces instance-local workflow trigger evaluation with durable, worker-driven
+evaluation over persisted Signals, schedules, timers, approvals, and trigger claims
+via the existing `LeasedJobStore` — resolving TD-36 (and materially reducing TD-31).
+Delivered: four ordered failure-isolated worker passes (signal triggers → schedules
+→ timers → approval resumes); `workflow.run` + `workflow.resume` handlers; timer
+persistence on delay suspension; durable approval decisions (enqueue, not inline);
+five service-role RPCs (schedule/timer/approval claim + health); `GET
+/api/worker/health`; unit + DB-gated integration tests; **all local gates green
+(lint/typecheck/300 unit tests/build)**. No distributed bus/Realtime; latency
+bounded by worker cadence (D-665..D-668). Decision Engine, Insights, and
+Intelligence UI are **not** started (blocked on Phase 1 staging validation).
+Plans: `docs/durable-triggers.md`, `docs/sprint-7-plan.md`.
 
 **Sprint 6.6 — Operational Readiness** ✅ complete — **validated on a live staging
 deployment, merged to `main`, tagged `v0.6.6`**. Closes the two highest-leverage

@@ -71,3 +71,12 @@ release gate — see [production-validation.md](./production-validation.md).
 ## Deployment & cron verification
 
 The Vercel Cron `* * * * * → /api/worker` setup, the authorized/rejected tick checks, and heartbeat/lease-recovery verification are documented in [deployment.md](./deployment.md#worker--cron-verification) and the staging checklist in [staging.md](./staging.md#step-6--worker--cron-validation).
+
+## Durable trigger & resume passes (Sprint 7)
+
+In durable mode each tick runs ordered, failure-isolated pre-claim passes between
+reclaim and claim: **signal triggers → schedules → timers → approval resumes**,
+then claim → execute → heartbeat. They enqueue `workflow.run` / `workflow.resume`
+jobs drained the same tick; a throwing pass emits `worker.pass.failed` and never
+blocks the others or the job drain. Per-pass liveness + aggregate health are at
+`GET /api/worker/health`. Full design: [durable-triggers.md](./durable-triggers.md).

@@ -150,6 +150,34 @@ correlated, audited); reversibility documented.
 
 ---
 
+## Phase 1 — implementation status (on `sprint-7-durable-triggers`)
+
+**Implemented + locally green** (lint/typecheck/300 unit tests/build):
+
+- Durable signal-trigger evaluator + production port + `workflow.run` handler.
+- Durable schedule evaluator (deterministic most-recent-missed catch-up, stable
+  occurrence identity, new root correlation).
+- Timer persistence (`workflow_timers` on delay suspension) + durable timer-resume
+  pass + `workflow.resume` handler.
+- Durable approval resumption: decision enqueues `workflow.resume` (no inline
+  execution in the request) + approval-resume catch-up pass; in-memory mode resumes
+  inline (equivalent).
+- Ordered failure-isolated worker passes (reclaim → signal triggers → schedules →
+  timers → approval resumes → claim → execute → heartbeat); per-pass metrics.
+- Migration RPCs (`app_claim_schedule_run`, `app_claim_due_timers`,
+  `app_claim_approval_resume`, `app_claim_due_approval_resumes`, `app_durable_health`)
+  - rollback + reset; `workflow_timers.node_id` + uniqueness.
+- `GET /api/worker/health` (CRON_SECRET-guarded); `workflowTriggerPath` diagnostic.
+- Unit + DB-gated integration tests. Full design: `docs/durable-triggers.md`.
+
+**Remaining before `v0.7.0` release** (human-gated, needs live infra/credentials):
+hosted production validation against `commandos-staging`; staging deploy + the
+signal/schedule/timer/approval staging smoke; worker/cron smoke; then the
+protected-PR merge to `main` + annotated `v0.7.0` tag. See "Hosted validation" in
+`docs/staging.md` and `docs/operations-runbook.md`.
+
+---
+
 ## Design decisions (approved 2026-08-05)
 
 - **D-665** cursor (optimization, not correctness; `trigger_claims` authoritative;

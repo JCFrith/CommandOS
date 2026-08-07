@@ -687,6 +687,16 @@ continuing in-process. This materially reduces **TD-31**, but TD-31 is **not clo
 unless mid-flight `AbortSignal` cancellation into Agent/AI calls is also implemented
 and verified.
 
+**Implementation note (2026-08-06).** D-666..D-668 are implemented on
+`sprint-7-durable-triggers` with green local gates: four ordered failure-isolated
+worker passes (signal triggers → schedules → timers → approval resumes),
+`workflow.run`/`workflow.resume` handlers, timer persistence on delay suspension,
+durable approval decisions (enqueue, not inline), five service-role RPCs, and
+`GET /api/worker/health`. Schedule catch-up processes only the most-recent missed
+occurrence (bounded), anchored deterministically at the version's `createdAt`. The
+release to `v0.7.0` remains gated on hosted-staging validation + staging smoke (not
+yet run — needs live infra). Full design: [`docs/durable-triggers.md`](./docs/durable-triggers.md).
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:
