@@ -47,6 +47,17 @@ if (validating) {
       await import('@/services/workflows/supabase-workflow-repository'),
     ],
     [
+      // The workflow service singleton lazily binds its durable approval resumer
+      // via `require('@/services/workflows/supabase-durable-trigger-port')`
+      // (server-only, kept out of the client bundle). vite-node's native
+      // `require()` cannot resolve the `@` alias or `.ts`, so this specifier MUST
+      // be intercepted here like the other server-only adapters — omitting it is
+      // what made services/workflows/index.ts throw "Cannot find module" in the
+      // durable-resume / durable-triggers integration suites.
+      '@/services/workflows/supabase-durable-trigger-port',
+      await import('@/services/workflows/supabase-durable-trigger-port'),
+    ],
+    [
       '@/services/ai/supabase-execution-logger',
       await import('@/services/ai/supabase-execution-logger'),
     ],
