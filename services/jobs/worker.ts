@@ -54,8 +54,17 @@ const SYSTEM_WS = 'system';
  * at-least-once and crash-safe; handlers must be idempotent (the WorkflowRuntime
  * is — completed steps skip by node id). No persistent-process assumptions.
  */
+/** Per-pass liveness (last run / last success / last failure) for Health/Metrics. */
+export interface PassMetric {
+  lastRunAt: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+}
+
 export class LeasedBackgroundWorker implements BackgroundWorker {
   private readonly handlers = new Map<string, JobHandler>();
+  /** Ephemeral per-pass liveness; surfaced via {@link metrics} (null = never run). */
+  private readonly passMetrics = new Map<string, PassMetric>();
   private _running = false;
 
   constructor(
@@ -65,6 +74,11 @@ export class LeasedBackgroundWorker implements BackgroundWorker {
 
   register(handler: JobHandler): void {
     this.handlers.set(handler.kind, handler);
+  }
+
+  /** A snapshot of each pass's last run / success / failure time (in-memory). */
+  metrics(): Record<string, PassMetric> {
+    return Object.fromEntries(this.passMetrics);
   }
   async start(): Promise<void> {
     this._running = true;
@@ -89,10 +103,22 @@ export class LeasedBackgroundWorker implements BackgroundWorker {
     let passesFailed = 0;
     for (const pass of this.deps.passes ?? []) {
       passesRun += 1;
+      const startedAt = this.deps.now();
       try {
         await pass.run();
+        this.passMetrics.set(pass.name, {
+          lastRunAt: startedAt,
+          lastOkAt: startedAt,
+          lastError: null,
+        });
       } catch {
         passesFailed += 1;
+        const prior = this.passMetrics.get(pass.name);
+        this.passMetrics.set(pass.name, {
+          lastRunAt: startedAt,
+          lastOkAt: prior?.lastOkAt ?? null,
+          lastError: startedAt,
+        });
         await this.emitPassFailure(pass.name);
       }
     }

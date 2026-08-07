@@ -28,6 +28,12 @@ drop function if exists app_scan_signals_after(uuid, timestamptz, uuid, int);
 drop function if exists app_claim_trigger_run(uuid, text, uuid, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz);
 drop function if exists app_advance_trigger_cursor(uuid, timestamptz, uuid, timestamptz);
 drop function if exists app_reset_trigger_cursor(uuid);
+-- Sprint 7 durable schedule/timer/approval resume.
+drop function if exists app_claim_schedule_run(uuid, uuid, text, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz);
+drop function if exists app_claim_due_timers(timestamptz, int, text);
+drop function if exists app_claim_approval_resume(uuid, uuid, uuid, text, timestamptz);
+drop function if exists app_claim_due_approval_resumes(timestamptz, int, text);
+drop function if exists app_durable_health(timestamptz);
 drop function if exists app_provision_personal_workspace(uuid, text);
 drop function if exists app_is_member(uuid);
 drop function if exists app_forbid_mutation();

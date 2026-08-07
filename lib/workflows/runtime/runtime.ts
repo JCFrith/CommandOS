@@ -161,6 +161,16 @@ export class WorkflowRuntime {
           null,
           startedAt,
         );
+        // Persist a durable timer (idempotent on run+node) so the worker can
+        // resume this run when the timer comes due — no in-process scheduler.
+        await this.deps.store.createTimer({
+          id: this.deps.id(),
+          workspaceId: current.workspaceId,
+          runId: current.id,
+          nodeId: node.id,
+          dueAt: outcome.resumeAt,
+          claimedAt: null,
+        });
         current = this.transition(current, 'waiting_timer', {
           frontier: [node.id, ...current.frontier],
         });

@@ -11,9 +11,13 @@ import type {
   ScannedSignal,
   SignalCursor,
 } from './durable-trigger-evaluator';
+import type { DurableSchedulePort, ScheduleClaimInput } from './durable-schedule-evaluator';
 
 /** The job kind the durable worker handler drains to execute a triggered run. */
 export const WORKFLOW_RUN_JOB_KIND = 'workflow.run';
+
+/** The job kind drained to resume a suspended run (due timer / decided approval). */
+export const WORKFLOW_RESUME_JOB_KIND = 'workflow.resume';
 
 export interface DurablePortDeps {
   id(): string;
@@ -30,7 +34,7 @@ const defaultDeps: DurablePortDeps = {
  * the atomic `app_claim_trigger_run` RPC. Server-only — every query is
  * workspace-scoped and the claim/run/enqueue is a single transaction (no stranding).
  */
-export class SupabaseDurableTriggerPort implements DurableTriggerPort {
+export class SupabaseDurableTriggerPort implements DurableTriggerPort, DurableSchedulePort {
   constructor(private readonly deps: DurablePortDeps = defaultDeps) {}
 
   private get db() {
@@ -39,6 +43,10 @@ export class SupabaseDurableTriggerPort implements DurableTriggerPort {
 
   now(): string {
     return this.deps.now();
+  }
+
+  newCorrelationId(): string {
+    return this.deps.id();
   }
 
   listActiveWorkflows(): Promise<Workflow[]> {
@@ -127,5 +135,73 @@ export class SupabaseDurableTriggerPort implements DurableTriggerPort {
     });
     if (error) throw new Error(`claimAndEnqueueRun failed: ${error.message}`);
     return (data as { claimed?: boolean } | null)?.claimed === true ? 'enqueued' : 'duplicate';
+  }
+
+  // --- schedule / timer / approval resume (Sprint 7 D-667/D-668) ------------
+
+  async claimScheduleRun(input: ScheduleClaimInput): Promise<ClaimOutcome> {
+    const { version, occurrenceKey, scheduledAt, correlationId } = input;
+    const { data, error } = await this.db.rpc('app_claim_schedule_run', {
+      p_workspace: version.workspaceId,
+      p_workflow_id: version.workflowId,
+      p_occurrence_key: occurrenceKey,
+      p_run_id: this.deps.id(),
+      p_version_id: version.id,
+      p_correlation_id: correlationId,
+      // Retain the scheduled occurrence time as causation (distinct from `now`).
+      p_trigger: { type: 'schedule', ref: occurrenceKey, scheduledAt },
+      p_variables: seedVariables(version.variables, {}),
+      p_started_by: version.createdBy,
+      p_job_kind: WORKFLOW_RUN_JOB_KIND,
+      p_now: this.deps.now(),
+    });
+    if (error) throw new Error(`claimScheduleRun failed: ${error.message}`);
+    return (data as { claimed?: boolean } | null)?.claimed === true ? 'enqueued' : 'duplicate';
+  }
+
+  /** Claim due timers + enqueue `workflow.resume` jobs (bounded). Returns count. */
+  async claimDueTimers(limit = 100): Promise<number> {
+    const { data, error } = await this.db.rpc('app_claim_due_timers', {
+      p_now: this.deps.now(),
+      p_limit: limit,
+      p_job_kind: WORKFLOW_RESUME_JOB_KIND,
+    });
+    if (error) throw new Error(`claimDueTimers failed: ${error.message}`);
+    return typeof data === 'number' ? data : 0;
+  }
+
+  /** Fast-path approval resume claim (from a decision). Idempotent per approval. */
+  async claimApprovalResume(
+    workspaceId: string,
+    approvalId: string,
+    runId: string,
+  ): Promise<ClaimOutcome> {
+    const { data, error } = await this.db.rpc('app_claim_approval_resume', {
+      p_workspace: workspaceId,
+      p_approval_id: approvalId,
+      p_run_id: runId,
+      p_job_kind: WORKFLOW_RESUME_JOB_KIND,
+      p_now: this.deps.now(),
+    });
+    if (error) throw new Error(`claimApprovalResume failed: ${error.message}`);
+    return (data as { claimed?: boolean } | null)?.claimed === true ? 'enqueued' : 'duplicate';
+  }
+
+  /** Catch-up: claim decided-but-unresumed approvals + enqueue. Returns count. */
+  async claimDueApprovalResumes(limit = 100): Promise<number> {
+    const { data, error } = await this.db.rpc('app_claim_due_approval_resumes', {
+      p_now: this.deps.now(),
+      p_limit: limit,
+      p_job_kind: WORKFLOW_RESUME_JOB_KIND,
+    });
+    if (error) throw new Error(`claimDueApprovalResumes failed: ${error.message}`);
+    return typeof data === 'number' ? data : 0;
+  }
+
+  /** Aggregate durable-runtime health snapshot (never secrets/per-row). */
+  async durableHealth(): Promise<Record<string, unknown>> {
+    const { data, error } = await this.db.rpc('app_durable_health', { p_now: this.deps.now() });
+    if (error) throw new Error(`durableHealth failed: ${error.message}`);
+    return (data as Record<string, unknown> | null) ?? {};
   }
 }

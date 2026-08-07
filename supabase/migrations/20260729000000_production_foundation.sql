@@ -377,13 +377,18 @@ create table if not exists trigger_claims (
   primary key (workspace_id, trigger_key)
 );
 
--- Resumable timers (delay nodes).
+-- Resumable timers (delay nodes). `node_id` pins the suspended delay node so a
+-- resume re-advances the right frontier; `unique (run_id, node_id)` makes timer
+-- creation idempotent (a re-suspension on the same node upserts, never duplicates).
+-- `claimed_at` is the atomic claim/consumed marker set by the durable timer pass.
 create table if not exists workflow_timers (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
   run_id uuid not null references workflow_runs(id) on delete cascade,
+  node_id text not null default '',
   due_at timestamptz not null,
-  claimed_at timestamptz
+  claimed_at timestamptz,
+  unique (run_id, node_id)
 );
 create index if not exists idx_timers_due on workflow_timers (due_at) where claimed_at is null;
 
@@ -549,6 +554,175 @@ begin
   returning j.*;
 end;
 $$;
+
+-- ============================================================================
+-- Sprint 7 Phase 1: durable schedule / timer / approval resume (D-666..D-670)
+-- ============================================================================
+-- Every function below is `security definer`, service-role-only, and does its
+-- claim + run-create/mutation + job-enqueue in ONE statement/transaction, so an
+-- at-least-once worker never strands a claim without its job (recoverable), never
+-- double-fires (dedup on schedule_occurrences / workflow_timers.claimed_at /
+-- trigger_claims), and is safe under concurrent workers + duplicate Cron.
+
+-- Schedule occurrence claim: dedup on schedule_occurrences, then create exactly
+-- one pending run + one workflow.run job. `p_occurrence_key` is server-derived
+-- (version + trigger index + scheduled boundary); `p_trigger` carries the
+-- scheduled-at causation. New root correlation is chosen by the caller per
+-- occurrence. Mirrors app_claim_trigger_run but keyed on the schedule occurrence.
+create or replace function app_claim_schedule_run(
+  p_workspace uuid, p_workflow_id uuid, p_occurrence_key text, p_run_id uuid, p_version_id uuid,
+  p_correlation_id uuid, p_trigger jsonb, p_variables jsonb, p_started_by uuid,
+  p_job_kind text, p_now timestamptz
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  insert into schedule_occurrences (workspace_id, workflow_id, occurrence_key, fired_at)
+    values (p_workspace, p_workflow_id, p_occurrence_key, p_now)
+    on conflict (workspace_id, workflow_id, occurrence_key) do nothing;
+  if not found then
+    return jsonb_build_object('claimed', false);
+  end if;
+  insert into workflow_runs (id, workspace_id, workflow_id, version_id, correlation_id,
+      status, trigger, trigger_key, variables, frontier, join_arrivals, started_by, created_at, updated_at)
+    values (p_run_id, p_workspace, p_workflow_id, p_version_id, p_correlation_id,
+      'pending', p_trigger, p_occurrence_key, coalesce(p_variables, '{}'::jsonb), '{}', '{}', p_started_by, p_now, p_now);
+  insert into jobs (workspace_id, kind, payload, status, created_at, updated_at)
+    values (p_workspace, p_job_kind,
+      jsonb_build_object('workspaceId', p_workspace, 'runId', p_run_id, 'versionId', p_version_id),
+      'queued', p_now, p_now);
+  return jsonb_build_object('claimed', true, 'run_id', p_run_id);
+end $$;
+revoke all on function app_claim_schedule_run(uuid, uuid, text, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz) from public, anon, authenticated;
+grant execute on function app_claim_schedule_run(uuid, uuid, text, uuid, uuid, uuid, jsonb, jsonb, uuid, text, timestamptz) to service_role;
+
+-- Durable timer resume: atomically claim due, unclaimed timers whose run is
+-- non-terminal (SKIP LOCKED, bounded) and enqueue exactly one workflow.resume job
+-- each. Claim (claimed_at) + enqueue are one statement, so a crash leaves neither.
+-- Overdue timers after downtime are simply still-due here. Returns claimed count.
+create or replace function app_claim_due_timers(p_now timestamptz, p_limit int, p_job_kind text)
+  returns int language plpgsql security definer set search_path = public as $$
+declare v_count int;
+begin
+  with due as (
+    select t.id from workflow_timers t
+    join workflow_runs r on r.id = t.run_id
+    where t.claimed_at is null and t.due_at <= p_now
+      and r.status not in ('completed','failed','cancelled','timed_out')
+    order by t.due_at
+    for update of t skip locked
+    limit greatest(0, least(coalesce(p_limit, 100), 500))
+  ),
+  claimed as (
+    update workflow_timers t set claimed_at = p_now
+    from due where t.id = due.id
+    returning t.id, t.workspace_id, t.run_id
+  ),
+  enq as (
+    insert into jobs (workspace_id, kind, payload, status, created_at, updated_at)
+    select c.workspace_id, p_job_kind,
+      jsonb_build_object('workspaceId', c.workspace_id, 'runId', c.run_id,
+                         'cause', 'timer', 'causeId', c.id),
+      'queued', p_now, p_now
+    from claimed c
+    returning 1
+  )
+  select count(*)::int into v_count from enq;
+  return coalesce(v_count, 0);
+end $$;
+revoke all on function app_claim_due_timers(timestamptz, int, text) from public, anon, authenticated;
+grant execute on function app_claim_due_timers(timestamptz, int, text) to service_role;
+
+-- Approval resume claim (fast path from decideApproval): dedup on a stable
+-- trigger_claims key, then enqueue exactly one workflow.resume job. Idempotent
+-- under duplicate decision requests + the catch-up pass (same key).
+create or replace function app_claim_approval_resume(
+  p_workspace uuid, p_approval_id uuid, p_run_id uuid, p_job_kind text, p_now timestamptz
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  insert into trigger_claims (workspace_id, trigger_key, run_id, created_at)
+    values (p_workspace, 'approval-resume:' || p_approval_id::text, p_run_id, p_now)
+    on conflict (workspace_id, trigger_key) do nothing;
+  if not found then
+    return jsonb_build_object('claimed', false);
+  end if;
+  insert into jobs (workspace_id, kind, payload, status, created_at, updated_at)
+    values (p_workspace, p_job_kind,
+      jsonb_build_object('workspaceId', p_workspace, 'runId', p_run_id,
+                         'cause', 'approval', 'causeId', p_approval_id),
+      'queued', p_now, p_now);
+  return jsonb_build_object('claimed', true);
+end $$;
+revoke all on function app_claim_approval_resume(uuid, uuid, uuid, text, timestamptz) from public, anon, authenticated;
+grant execute on function app_claim_approval_resume(uuid, uuid, uuid, text, timestamptz) to service_role;
+
+-- Approval-resume catch-up pass: decided approvals whose run still waits and that
+-- have no resume claim yet (e.g. the deciding request crashed after persisting the
+-- decision but before enqueuing). Claim + enqueue atomically, bounded, SKIP LOCKED.
+create or replace function app_claim_due_approval_resumes(p_now timestamptz, p_limit int, p_job_kind text)
+  returns int language plpgsql security definer set search_path = public as $$
+declare v_count int;
+begin
+  with due as (
+    select a.id, a.workspace_id, a.run_id from workflow_approvals a
+    join workflow_runs r on r.id = a.run_id
+    where a.status in ('approved','rejected')
+      and r.status = 'waiting_approval'
+      and not exists (
+        select 1 from trigger_claims tc
+        where tc.workspace_id = a.workspace_id
+          and tc.trigger_key = 'approval-resume:' || a.id::text
+      )
+    order by a.decided_at
+    for update of a skip locked
+    limit greatest(0, least(coalesce(p_limit, 100), 500))
+  ),
+  claimed as (
+    insert into trigger_claims (workspace_id, trigger_key, run_id, created_at)
+    select d.workspace_id, 'approval-resume:' || d.id::text, d.run_id, p_now from due
+    on conflict (workspace_id, trigger_key) do nothing
+    returning workspace_id, run_id, trigger_key
+  ),
+  enq as (
+    insert into jobs (workspace_id, kind, payload, status, created_at, updated_at)
+    select c.workspace_id, p_job_kind,
+      jsonb_build_object('workspaceId', c.workspace_id, 'runId', c.run_id,
+                         'cause', 'approval', 'causeId', split_part(c.trigger_key, ':', 2)),
+      'queued', p_now, p_now
+    from claimed c
+    returning 1
+  )
+  select count(*)::int into v_count from enq;
+  return coalesce(v_count, 0);
+end $$;
+revoke all on function app_claim_due_approval_resumes(timestamptz, int, text) from public, anon, authenticated;
+grant execute on function app_claim_due_approval_resumes(timestamptz, int, text) to service_role;
+
+-- Aggregate durable-runtime health (never per-row; null/unknown where unmeasurable).
+-- Read-only, service-role callable. Schedule backlog is null: interval schedules
+-- fire only the most-recent occurrence, so there is no meaningful DB backlog count.
+create or replace function app_durable_health(p_now timestamptz)
+  returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'scheduleBacklog', null,
+    'overdueTimers', (select count(*) from workflow_timers where claimed_at is null and due_at <= p_now),
+    'oldestOverdueTimerMs', (
+      select extract(epoch from (p_now - min(due_at))) * 1000
+      from workflow_timers where claimed_at is null and due_at <= p_now
+    ),
+    'pendingApprovalResumes', (
+      select count(*) from workflow_approvals a join workflow_runs r on r.id = a.run_id
+      where a.status in ('approved','rejected') and r.status = 'waiting_approval'
+        and not exists (select 1 from trigger_claims tc
+          where tc.workspace_id = a.workspace_id and tc.trigger_key = 'approval-resume:' || a.id::text)
+    ),
+    'resumeQueueDepth', (select count(*) from jobs where kind = 'workflow.resume' and status = 'queued'),
+    'oldestResumeJobMs', (
+      select extract(epoch from (p_now - min(coalesce(scheduled_for, created_at)))) * 1000
+      from jobs where kind = 'workflow.resume' and status = 'queued'
+    )
+  );
+$$;
+revoke all on function app_durable_health(timestamptz) from public, anon, authenticated;
+grant execute on function app_durable_health(timestamptz) to service_role;
 
 -- ============================================================================
 -- Triggers: append-only, immutability, timestamps
