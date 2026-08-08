@@ -97,6 +97,15 @@ if (validating) {
     '@/services/workspaces/supabase-workspace-repository',
     await import('@/services/workspaces/supabase-workspace-repository'),
   );
+  // The jobs singleton (services/jobs/index.ts) lazily requires the Sprint 7
+  // durable job handlers via `require('@/services/jobs/workflow-durable')` to
+  // register them on the worker. Same vite-node alias problem — intercept it too.
+  // Registered LAST: it transitively imports @/services/workflows (the workflow
+  // singleton + durable port), so those specifiers must already be in the map.
+  preloaded.set(
+    '@/services/jobs/workflow-durable',
+    await import('@/services/jobs/workflow-durable'),
+  );
 }
 
 /** Whether we are in live production-validation mode (real DB present). */
