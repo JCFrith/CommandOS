@@ -243,7 +243,7 @@ begin
   ),
   claimed as (
     insert into trigger_claims (workspace_id, trigger_key, run_id, created_at)
-    select d.workspace_id, 'approval-resume:' || d.id::text, d.run_id, p_now from due
+    select d.workspace_id, 'approval-resume:' || d.id::text, d.run_id, p_now from due d
     on conflict (workspace_id, trigger_key) do nothing
     returning workspace_id, run_id, trigger_key
   ),
