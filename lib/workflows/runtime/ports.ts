@@ -4,6 +4,7 @@ import type {
   WorkflowRun,
   WorkflowRunContext,
   WorkflowStepRun,
+  WorkflowTimer,
   WorkflowVariables,
 } from '@/lib/workflows/types';
 
@@ -69,6 +70,12 @@ export interface WorkflowRunSink {
   saveRun(run: WorkflowRun): Promise<void>;
   appendStep(step: WorkflowStepRun): Promise<void>;
   listSteps(workspaceId: string, runId: string): Promise<WorkflowStepRun[]>;
+  /**
+   * Persist a resumable timer for a suspended delay node. Idempotent on
+   * `(runId, nodeId)` — a re-suspension upserts the due time and clears the
+   * claim rather than creating a duplicate. Enables durable timer resumption.
+   */
+  createTimer(timer: WorkflowTimer): Promise<void>;
   createApproval(approval: WorkflowApproval): Promise<void>;
   getApprovalForNode(
     workspaceId: string,

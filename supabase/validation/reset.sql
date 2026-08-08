@@ -13,7 +13,7 @@ begin
     operation_activity, operations, agent_activity, agent_executions, agents,
     execution_logs, signal_events, signals, signal_subscriptions,
     workflow_step_runs, workflow_approvals, workflow_timers, workflow_runs,
-    workflow_versions, workflows, trigger_claims, schedule_occurrences, jobs,
+    workflow_versions, workflows, trigger_claims, trigger_scan_cursor, schedule_occurrences, jobs,
     workspace_members, workspaces
   restart identity cascade;
 end;

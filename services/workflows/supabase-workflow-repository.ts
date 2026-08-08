@@ -6,6 +6,7 @@ import type {
   WorkflowApproval,
   WorkflowRun,
   WorkflowStepRun,
+  WorkflowTimer,
   WorkflowVersion,
 } from '@/lib/workflows/types';
 import { serviceClient } from '@/lib/supabase/service';
@@ -283,6 +284,23 @@ export class SupabaseWorkflowRepository implements WorkflowRepository {
     if (error) throw new Error(error.message);
     return (data ?? []).map(toStep);
   }
+  async createTimer(t: WorkflowTimer): Promise<void> {
+    // Idempotent on (run_id, node_id): a re-suspension upserts due_at and clears
+    // the claim, so a timer is never duplicated for the same suspended node.
+    const { error } = await this.db.from('workflow_timers').upsert(
+      {
+        id: t.id,
+        workspace_id: t.workspaceId,
+        run_id: t.runId,
+        node_id: t.nodeId,
+        due_at: t.dueAt,
+        claimed_at: t.claimedAt,
+      },
+      { onConflict: 'run_id,node_id' },
+    );
+    if (error) throw new Error(error.message);
+  }
+
   async createApproval(a: WorkflowApproval): Promise<void> {
     const { error } = await this.db.from('workflow_approvals').insert({
       id: a.id,

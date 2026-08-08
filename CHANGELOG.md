@@ -9,7 +9,28 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet._
+Sprint 7 — **Intelligence & Decision Engine** · Phase 1 (Durable Trigger Evaluation),
+on `sprint-7-durable-triggers` (targets `v0.7.0`; **not merged/tagged**; pending
+hosted-staging validation). Durable, worker-driven evaluation of Signal, schedule,
+timer, and approval triggers via the existing `LeasedJobStore` — resolving TD-36 and
+materially reducing TD-31. Decisions D-665..D-668. See `docs/durable-triggers.md`.
+
+- **Added** — durable signal-trigger evaluator + production port + `workflow.run`
+  handler; durable schedule evaluator (deterministic most-recent-missed catch-up);
+  durable timer persistence (`workflow_timers` on delay suspension) + timer-resume
+  pass; durable approval resume (decision enqueues `workflow.resume` instead of
+  executing inline) + catch-up pass; `workflow.resume` handler.
+- **Added** — ordered, failure-isolated worker passes (reclaim → signal triggers →
+  schedules → timers → approval resumes → claim → execute → heartbeat); per-pass
+  liveness metrics; `GET /api/worker/health` (CRON_SECRET-guarded) durable health;
+  `workflowTriggerPath` / `triggerPath` diagnostics.
+- **Added** — migration RPCs `app_claim_schedule_run`, `app_claim_due_timers`,
+  `app_claim_approval_resume`, `app_claim_due_approval_resumes`, `app_durable_health`
+  (service-role-only, atomic claim+enqueue); `workflow_timers.node_id` +
+  `unique(run_id,node_id)`; rollback + validation-reset support.
+- **Tests** — 17 new unit tests (schedule occurrence math/identity, resume dispatch,
+  durable-vs-inline approval, timer persistence) + DB-gated integration
+  (`durable-resume.test.ts`, `durable-triggers.test.ts`).
 
 ## [0.6.6] — 2026-08-05
 

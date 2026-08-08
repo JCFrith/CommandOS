@@ -81,3 +81,20 @@ adapter contracts, RLS, concurrency, recovery, smoke, and `EXPLAIN` plans — pl
 how to run it (GitHub Actions local stack or an isolated hosted project) is
 documented in [production-validation.md](./production-validation.md). Sprint 6.5
 cannot be released until that gate reports `PASS`.
+
+## Durable trigger/resume objects (Sprint 7)
+
+The foundation migration adds, for durable schedule/timer/approval resumption
+(all `security definer`, service-role-only, workspace-scoped; rollback + reset
+support included):
+
+- `workflow_timers.node_id` + `unique(run_id, node_id)` — idempotent timer
+  persistence per suspended delay node (`idx_timers_due` for due scanning).
+- RPCs `app_claim_schedule_run` (dedup on `schedule_occurrences` → run + job),
+  `app_claim_due_timers` (atomic claim + enqueue `workflow.resume`),
+  `app_claim_approval_resume` / `app_claim_due_approval_resumes` (dedup on
+  `trigger_claims` key `approval-resume:<id>`), and read-only `app_durable_health`.
+
+Each claim RPC does its dedup + run/timer mutation + job enqueue in one
+transaction, so at-least-once workers never strand a claim without its job. See
+[durable-triggers.md](./durable-triggers.md).
