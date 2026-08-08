@@ -39,7 +39,10 @@ async function seedActiveWorkflow(
     updatedAt: now,
   };
   await repo.createWorkflow(wf);
-  const verId = `00000000-0000-0000-0000-0000000000${suffix}f`;
+  // 12 hex in the final group: 9 zeros + 2-char suffix + trailing 'f' (distinct
+  // from the workflow id's `…0000000000${suffix}`). The previous `…0000000000${suffix}f`
+  // was 13 hex — an invalid uuid that made createVersion throw.
+  const verId = `00000000-0000-0000-0000-000000000${suffix}f`;
   const ver = {
     id: verId,
     workflowId: wf.id,
