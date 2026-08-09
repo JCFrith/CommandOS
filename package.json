@@ -27,6 +27,7 @@
     "db:rollback:test": "node scripts/validation/migrate.mjs sprint7",
     "db:replay:test": "node scripts/validation/migrate.mjs replay",
     "db:verify:privileges": "node scripts/validation/privileges.mjs",
+    "db:verify:roles": "node scripts/validation/roles.mjs",
     "test:adapters:supabase": "vitest run -c vitest.integration.config.ts tests/integration/adapters.test.ts",
     "test:integration:database": "vitest run -c vitest.integration.config.ts tests/integration/database.test.ts",
     "test:integration:worker": "vitest run -c vitest.integration.config.ts tests/integration/worker.test.ts",

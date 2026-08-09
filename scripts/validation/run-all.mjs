@@ -62,6 +62,14 @@ step('apply validation helpers', 'psql', [
 //    matrix for every privileged RPC + infra table (fail-closed on any violation).
 step('privilege assertions', 'node', ['scripts/validation/privileges.mjs']);
 
+// 4b. Client-role diagnostics: prove each Supabase HTTP client resolves to the
+//     intended Postgres role (service_role / anon / authenticated) by round-trip.
+//     Runs AFTER reset.sql applied app_effective_role, and BEFORE the suites, so a
+//     swapped/wrong/wrong-format key fails fast with one clear message instead of
+//     ~35 misleading permission failures. The privilege model can be perfect while
+//     the CLIENTS act as the wrong role — this catches exactly that gap.
+step('client role diagnostics', 'node', ['scripts/validation/roles.mjs']);
+
 // 5. Database-backed integration suites (single vitest run, JSON + console).
 //    These MUST NOT be skipped in production-validation mode; report.mjs fails the
 //    gate if any required test is skipped.

@@ -22,6 +22,11 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['tests/integration/**/*.test.ts'],
+    // Run-wide credential/role preflight: in validation mode it proves each
+    // Supabase client resolves to its intended Postgres role and aborts the whole
+    // run with one clear error if not (instead of ~35 misleading permission
+    // failures). No-op outside PRODUCTION_VALIDATION.
+    globalSetup: ['tests/integration/global-setup.ts'],
     setupFiles: ['tests/integration/setup.ts'],
     hookTimeout: 120_000,
     testTimeout: 120_000,

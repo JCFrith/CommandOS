@@ -8,20 +8,15 @@
  */
 import Module from 'node:module';
 
+import { applyValidationEnv } from './env-map';
+
 const validating = process.env.PRODUCTION_VALIDATION === '1';
 
 if (validating) {
-  const url = process.env.SUPABASE_TEST_URL;
-  const serviceKey = process.env.SUPABASE_TEST_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    throw new Error(
-      'PRODUCTION_VALIDATION=1 but SUPABASE_TEST_URL / SUPABASE_TEST_SERVICE_ROLE_KEY are missing — failing closed (gated DB tests must not be skipped).',
-    );
-  }
-  process.env.NEXT_PUBLIC_SUPABASE_URL = url;
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.SUPABASE_TEST_ANON_KEY ?? 'anon-key';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKey;
-  process.env.USE_SUPABASE_PERSISTENCE = '1';
+  // Map SUPABASE_TEST_* onto the exact runtime vars the real adapters consume,
+  // via the single shared mapping (kept identical to the run-wide global setup so
+  // the two can never drift). Fails closed if the required creds are absent.
+  applyValidationEnv();
 
   // The production singletons bind their server-only adapters via a lazy
   // `require('@/...')` (keeps `server-only` out of the client bundle). Under
