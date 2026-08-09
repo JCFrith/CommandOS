@@ -345,3 +345,36 @@ grant execute on function app_durable_health(timestamptz) to service_role;
 -- re-loosen it — reverting a privilege fix would reintroduce the hole.)
 revoke all on function claim_jobs(text, int, timestamptz, int) from public, anon, authenticated;
 grant execute on function claim_jobs(text, int, timestamptz, int) to service_role;
+
+-- ----------------------------------------------------------------------------
+-- Defense-in-depth: explicit table-privilege lockdown for browser roles
+-- ----------------------------------------------------------------------------
+-- Hosted Supabase's ALTER DEFAULT PRIVILEGES grants anon/authenticated broad table
+-- access at CREATE time (its model leans on RLS for row enforcement). RLS already
+-- denies every row on these tables to browser roles, but we do NOT rely on platform
+-- defaults: revoke the table grants so anon/authenticated are denied at the GRANT
+-- layer too (belt-and-suspenders — the release gate asserts both layers). service_role
+-- keeps its explicit `grant all` from the released foundation migration and always
+-- scopes by workspace_id in application code. REVOKE-after-CREATE is stable: default
+-- privileges apply only at creation and this migration runs after every table exists.
+-- On the local stack (no such default grants) these REVOKEs are harmless no-ops.
+
+-- Infrastructure tables: service-role-only. No anon/authenticated/PUBLIC access at all.
+revoke all on jobs, trigger_claims, schedule_occurrences, signal_subscriptions, trigger_scan_cursor
+  from anon, authenticated, public;
+
+-- Tenant tables: authenticated retains RLS-filtered SELECT (granted by the released
+-- foundation migration); no browser role may INSERT/UPDATE/DELETE, and anon/PUBLIC
+-- get nothing. All writes go through service_role (bypasses RLS, scopes in app code).
+revoke insert, update, delete on
+  workspaces, workspace_members, operations, operation_activity, agents,
+  agent_activity, agent_executions, execution_logs, workflows, workflow_versions,
+  workflow_runs, workflow_step_runs, workflow_approvals, workflow_timers,
+  signals, signal_events
+  from anon, authenticated, public;
+revoke select on
+  workspaces, workspace_members, operations, operation_activity, agents,
+  agent_activity, agent_executions, execution_logs, workflows, workflow_versions,
+  workflow_runs, workflow_step_runs, workflow_approvals, workflow_timers,
+  signals, signal_events
+  from anon, public;
