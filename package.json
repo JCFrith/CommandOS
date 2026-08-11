@@ -38,6 +38,7 @@
     "test:integration:durable-resume": "vitest run -c vitest.integration.config.ts tests/integration/durable-resume.test.ts",
     "test:performance:database": "node scripts/validation/explain-plans.mjs",
     "test:production:smoke": "vitest run -c vitest.integration.config.ts tests/integration/production-smoke.test.ts",
+    "test:staging:smoke": "vitest run -c vitest.staging.config.ts",
     "validate:production": "node scripts/validation/run-all.mjs",
     "prepare": "husky"
   },
