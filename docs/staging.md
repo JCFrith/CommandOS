@@ -219,3 +219,27 @@ a cadence limitation, not a correctness gap (the tick logic is identical).
 
 Verify health with `GET /api/worker/health` (CRON_SECRET) — overdue timers, resume
 queue depth, per-pass liveness. Full design: [durable-triggers.md](./durable-triggers.md).
+
+### Results (2026-08-11 — v0.7.0) — ✅ PASS
+
+The automated live smoke (`tests/staging/staging-smoke.test.ts`, gated on
+`PRODUCTION_VALIDATION=1` + `STAGING_URL` + `CRON_SECRET`) drives the **deployed**
+worker route end to end and passed **7/7**:
+
+1. worker authorization + health/metrics endpoints (401 without/with wrong bearer;
+   `triggerPath: 'durable'`; health aggregates present).
+2. durable signal trigger + duplicate suppression (incl. concurrent workers).
+3. durable scheduled trigger + occurrence dedup.
+4. durable timer resume (due timer → claim → resume → advance).
+5. durable approval resume (decided approval → catch-up → resume → complete).
+6. signal claiming is workspace-scoped (no cross-tenant run).
+7. idempotent across many stateless ticks (cold-start / redeploy safe).
+
+Preceded by the client-role preflight (service_role/anon/app-adapter resolve to the
+intended roles) and the hosted production validation run. One release-blocking issue
+was found and fixed: the scheduled-trigger check selected a nonexistent
+`schedule_occurrences.id` column, so a failed PostgREST query was masked by a
+non-null assertion (`data!.length`) throwing an opaque `TypeError`. It was
+**test-harness-only** — `service_role` SELECT on the table was already intentionally
+granted; the fix corrects the query and makes the smoke surface the real DB error
+instead of null-dereferencing.

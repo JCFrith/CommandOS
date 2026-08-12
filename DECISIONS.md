@@ -693,9 +693,38 @@ worker passes (signal triggers → schedules → timers → approval resumes),
 `workflow.run`/`workflow.resume` handlers, timer persistence on delay suspension,
 durable approval decisions (enqueue, not inline), five service-role RPCs, and
 `GET /api/worker/health`. Schedule catch-up processes only the most-recent missed
-occurrence (bounded), anchored deterministically at the version's `createdAt`. The
-release to `v0.7.0` remains gated on hosted-staging validation + staging smoke (not
-yet run — needs live infra). Full design: [`docs/durable-triggers.md`](./docs/durable-triggers.md).
+occurrence (bounded), anchored deterministically at the version's `createdAt`.
+**Hosted-staging validation is complete (2026-08-11):** local + hosted production
+validation PASS, client-role diagnostics PASS, and the live Vercel staging smoke
+passed **7/7** against the deployed worker route — clearing the last gate for
+`v0.7.0`. Full design: [`docs/durable-triggers.md`](./docs/durable-triggers.md).
+
+## Release confirmations (2026-08-11 — v0.7.0)
+
+Confirmed by the product owner at the Sprint 7 Phase 1 release:
+
+- **D-665..D-668 approved and shipped** — durable, worker-driven evaluation of
+  Signal, schedule, timer, and approval triggers over persisted state (no
+  distributed bus / Realtime / `LISTEN/NOTIFY`; latency bounded by worker cadence).
+  In-memory dev retains the synchronous `TriggerEngine` (behaviour-equivalent).
+- **Validation PASS** — local production validation PASS; hosted production
+  validation PASS; client-role diagnostics PASS (service_role/anon/app service
+  adapter each resolve to the intended Postgres role); **live Vercel staging smoke
+  7/7** driving the deployed `POST /api/worker` route against the isolated staging
+  database. Durable signal/schedule/timer/approval paths, workspace isolation, and
+  stateless/idempotent worker behaviour (repeated + concurrent ticks) all verified.
+  The one release-blocking issue found — a smoke-harness query selecting a
+  nonexistent `schedule_occurrences.id` column that masked the real DB error behind
+  a null-deref — was **test-harness-only** (no app/schema/RLS/grant defect) and
+  fixed on the branch; `service_role` SELECT on that table was already intentionally
+  granted.
+- **TD-36 resolved** (→ TD-R13); **TD-31 narrowed** to mid-flight Agent/AI
+  `AbortSignal` cancellation only.
+- **Release.** `sprint-7-durable-triggers` reconciled with `main` (0 behind) and
+  merged **non-fast-forward** (history preserved, not squashed), tagged **v0.7.0**;
+  `v0.6.6` and all earlier tags unchanged.
+- **Phase 2 (Decision Engine) has NOT started** — deliberately deferred until after
+  this release.
 
 ## Release confirmations (2026-07-29 — v0.6.0)
 

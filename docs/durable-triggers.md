@@ -10,6 +10,15 @@ Decisions: **D-665** (cursor), **D-666** (durable worker execution),
 **D-667** (latency bounded by cadence), **D-668** (timer/approval resumption).
 Supersedes the in-process `TriggerEngine` (TD-36) in durable mode.
 
+**Validation status (2026-08-11 — v0.7.0):** ✅ validated end-to-end. Local
+production validation PASS and hosted production validation PASS (client-role
+diagnostics PASS: service_role/anon/app-adapter resolve to the intended roles),
+plus the **live Vercel staging smoke 7/7** driving the deployed `POST /api/worker`
+route against the isolated staging database — exercising all four durable paths
+(signal, schedule, timer, approval), workspace isolation, and stateless/idempotent
+worker behaviour across repeated and concurrent ticks. **TD-36 is resolved**; only
+mid-flight Agent/AI `AbortSignal` cancellation remains open under TD-31.
+
 ---
 
 ## Mode selection

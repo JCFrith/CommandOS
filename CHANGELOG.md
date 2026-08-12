@@ -9,11 +9,23 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-Sprint 7 — **Intelligence & Decision Engine** · Phase 1 (Durable Trigger Evaluation),
-on `sprint-7-durable-triggers` (targets `v0.7.0`; **not merged/tagged**; pending
-hosted-staging validation). Durable, worker-driven evaluation of Signal, schedule,
-timer, and approval triggers via the existing `LeasedJobStore` — resolving TD-36 and
-materially reducing TD-31. Decisions D-665..D-668. See `docs/durable-triggers.md`.
+_Nothing yet. Sprint 7 Phase 2 (Decision Engine) has not started._
+
+## [0.7.0] — 2026-08-11
+
+Sprint 7 — **Intelligence & Decision Engine** · Phase 1 (Durable Trigger Evaluation).
+Durable, worker-driven evaluation of Signal, schedule, timer, and approval triggers
+via the existing `LeasedJobStore` — **resolving TD-36** and narrowing TD-31 to
+mid-flight Agent/AI `AbortSignal` cancellation only. Decisions D-665..D-668. See
+`docs/durable-triggers.md`.
+
+**Validated** — local production validation PASS and hosted production validation
+PASS; client-role diagnostics PASS (service_role/anon/app-adapter resolve to the
+intended roles); **live Vercel staging smoke 7/7** driving the deployed
+`POST /api/worker` route against the isolated staging database — durable
+signal/schedule/timer/approval paths, workspace isolation, and stateless/idempotent
+worker behaviour (repeated + concurrent ticks) all verified. Local gates green
+(lint · typecheck · 300 unit tests · build).
 
 - **Added** — durable signal-trigger evaluator + production port + `workflow.run`
   handler; durable schedule evaluator (deterministic most-recent-missed catch-up);

@@ -1,24 +1,28 @@
 # PROJECT_STATUS
 
-_Last updated at the start of Sprint 7 Phase 1 (durable triggers), on `sprint-7-durable-triggers`._
+_Last updated at the Sprint 7 Phase 1 release (durable triggers), `v0.7.0`._
 
 ## Current Sprint
 
-**Sprint 7 — Intelligence & Decision Engine** 🚧 **Phase 1 — Durable Trigger
-Evaluation** implemented on `sprint-7-durable-triggers` (targets `v0.7.0`; **not
-merged/tagged — pending hosted-staging validation**, the one remaining gate).
-Replaces instance-local workflow trigger evaluation with durable, worker-driven
-evaluation over persisted Signals, schedules, timers, approvals, and trigger claims
-via the existing `LeasedJobStore` — resolving TD-36 (and materially reducing TD-31).
-Delivered: four ordered failure-isolated worker passes (signal triggers → schedules
-→ timers → approval resumes); `workflow.run` + `workflow.resume` handlers; timer
-persistence on delay suspension; durable approval decisions (enqueue, not inline);
-five service-role RPCs (schedule/timer/approval claim + health); `GET
-/api/worker/health`; unit + DB-gated integration tests; **all local gates green
-(lint/typecheck/300 unit tests/build)**. No distributed bus/Realtime; latency
-bounded by worker cadence (D-665..D-668). Decision Engine, Insights, and
-Intelligence UI are **not** started (blocked on Phase 1 staging validation).
-Plans: `docs/durable-triggers.md`, `docs/sprint-7-plan.md`.
+**Sprint 7 — Intelligence & Decision Engine** ✅ **Phase 1 — Durable Trigger
+Evaluation** complete — **validated on a live staging deployment, merged to `main`,
+tagged `v0.7.0`**. Replaces instance-local workflow trigger evaluation with durable,
+worker-driven evaluation over persisted Signals, schedules, timers, approvals, and
+trigger claims via the existing `LeasedJobStore` — **resolving TD-36** and narrowing
+TD-31 to mid-flight Agent/AI `AbortSignal` cancellation only. Delivered: four ordered
+failure-isolated worker passes (signal triggers → schedules → timers → approval
+resumes); `workflow.run` + `workflow.resume` handlers; timer persistence on delay
+suspension; durable approval decisions (enqueue, not inline); five service-role RPCs
+(schedule/timer/approval claim + health); `GET /api/worker/health`; unit + DB-gated
+integration tests. **Validated:** local production validation PASS, hosted production
+validation PASS, client-role diagnostics PASS, and the **live Vercel staging smoke
+7/7** driving the deployed `POST /api/worker` route (durable signal/schedule/timer/
+approval paths, workspace isolation, stateless/idempotent worker behaviour under
+repeated + concurrent ticks). **All local gates green (lint/typecheck/300 unit
+tests/build).** No distributed bus/Realtime; latency bounded by worker cadence
+(D-665..D-668). **Phase 2 — Decision Engine, Insights, and Intelligence UI — has NOT
+started** (deliberately deferred until after this release). Plans:
+`docs/durable-triggers.md`, `docs/sprint-7-plan.md`.
 
 **Sprint 6.6 — Operational Readiness** ✅ complete — **validated on a live staging
 deployment, merged to `main`, tagged `v0.6.6`**. Closes the two highest-leverage
