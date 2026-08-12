@@ -56,13 +56,40 @@ async function health(): Promise<{ status: number; body: Record<string, unknown>
   return { status: res.status, body };
 }
 
+/**
+ * Await a PostgREST list query and fail with the REAL database error instead of a
+ * null-deref. A malformed query (e.g. a nonexistent column) or a denied SELECT
+ * surfaces `error` with `data === null`; asserting `data!.length` would throw an
+ * opaque `TypeError` and hide the actual cause. This makes the smoke fail loudly
+ * with the message Postgres/PostgREST returned — never a non-null assertion.
+ */
+async function rows<T = Record<string, unknown>>(
+  label: string,
+  query: PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const { data, error } = await query;
+  if (error) throw new Error(`${label}: ${error.message}`);
+  if (data === null) throw new Error(`${label}: query returned null data with no error`);
+  return data;
+}
+
+/** As `rows`, for `.single()` queries that resolve to exactly one row. */
+async function one<T = Record<string, unknown>>(
+  label: string,
+  query: PromiseLike<{ data: T | null; error: { message: string } | null }>,
+): Promise<T> {
+  const { data, error } = await query;
+  if (error) throw new Error(`${label}: ${error.message}`);
+  if (data === null) throw new Error(`${label}: query returned null data with no error`);
+  return data;
+}
+
 async function countRuns(workflowId: string): Promise<number> {
-  const { data, error } = await testDb()
-    .from('workflow_runs')
-    .select('id')
-    .eq('workflow_id', workflowId);
-  if (error) throw new Error(`countRuns: ${error.message}`);
-  return data!.length;
+  const data = await rows(
+    'countRuns',
+    testDb().from('workflow_runs').select('id').eq('workflow_id', workflowId),
+  );
+  return data.length;
 }
 
 async function insertSignal(
@@ -70,23 +97,25 @@ async function insertSignal(
   createdAt: string,
   correlationId: string = CORRELATION,
 ): Promise<string> {
-  const { data, error } = await testDb()
-    .from('signals')
-    .insert({
-      workspace_id: ws,
-      type: 'operation.created',
-      correlation_id: correlationId,
-      source: 'operations',
-      category: 'lifecycle',
-      severity: 'info',
-      title: 't',
-      summary: 's',
-      created_at: createdAt,
-    })
-    .select('id')
-    .single();
-  if (error) throw new Error(`insert signal failed: ${error.message}`);
-  return data!.id as string;
+  const data = await one<{ id: string }>(
+    'insert signal',
+    testDb()
+      .from('signals')
+      .insert({
+        workspace_id: ws,
+        type: 'operation.created',
+        correlation_id: correlationId,
+        source: 'operations',
+        category: 'lifecycle',
+        severity: 'info',
+        title: 't',
+        summary: 's',
+        created_at: createdAt,
+      })
+      .select('id')
+      .single(),
+  );
+  return data.id;
 }
 
 /** An active workflow whose single version has the given triggers + node graph. */
@@ -253,8 +282,16 @@ async function seedRun(
     await tick(); // schedule pass claims the most-recent missed occurrence
     await tick(); // drain
     expect(await countRuns(workflowId)).toBe(1);
-    const occ = await testDb().from('schedule_occurrences').select('id');
-    expect(occ.data!.length).toBeGreaterThanOrEqual(1);
+    // `schedule_occurrences` is service-role-only (RLS on, no browser policy) and its
+    // PK is (workspace_id, workflow_id, occurrence_key) — there is NO `id` column, so
+    // the prior `.select('id')` was a malformed query that PostgREST rejected. Select a
+    // real column, scoped to this workflow, so `rows()` surfaces any DB error instead of
+    // a null-deref: exactly one dedup occurrence backs the single run above.
+    const occ = await rows(
+      'schedule_occurrences select',
+      testDb().from('schedule_occurrences').select('occurrence_key').eq('workflow_id', workflowId),
+    );
+    expect(occ.length).toBe(1);
 
     // Same-window re-ticks (and a duplicate "cron") never create a second run.
     await tick();
@@ -296,28 +333,33 @@ async function seedRun(
     await tick(); // timer pass claims + enqueues workflow.resume
     await tick(); // execute pass drains the resume → run advances
 
-    const claimedTimer = await testDb()
-      .from('workflow_timers')
-      .select('claimed_at')
-      .eq('run_id', run.id)
-      .single();
-    expect(claimedTimer.data!.claimed_at).not.toBeNull();
+    const claimedTimer = await one<{ claimed_at: string | null }>(
+      'claimed timer',
+      testDb().from('workflow_timers').select('claimed_at').eq('run_id', run.id).single(),
+    );
+    expect(claimedTimer.claimed_at).not.toBeNull();
 
-    const resumeJobs = await testDb()
-      .from('jobs')
-      .select('id, payload')
-      .eq('kind', 'workflow.resume');
-    expect(resumeJobs.data!.length).toBeGreaterThanOrEqual(1);
-    expect((resumeJobs.data![0]!.payload as { runId: string }).runId).toBe(run.id);
+    const resumeJobs = await rows<{ id: string; payload: { runId: string } }>(
+      'resume jobs',
+      testDb().from('jobs').select('id, payload').eq('kind', 'workflow.resume'),
+    );
+    expect(resumeJobs.length).toBeGreaterThanOrEqual(1);
+    expect(resumeJobs[0]?.payload.runId).toBe(run.id);
 
-    const after = await testDb().from('workflow_runs').select('status').eq('id', run.id).single();
-    expect(after.data!.status).toBe('completed');
+    const after = await one<{ status: string }>(
+      'run status',
+      testDb().from('workflow_runs').select('status').eq('id', run.id).single(),
+    );
+    expect(after.status).toBe('completed');
 
     // Idempotent: no further resume jobs on a subsequent tick.
-    const before = resumeJobs.data!.length;
+    const before = resumeJobs.length;
     await tick();
-    const nowJobs = await testDb().from('jobs').select('id').eq('kind', 'workflow.resume');
-    expect(nowJobs.data!.length).toBe(before);
+    const nowJobs = await rows(
+      'resume jobs after tick',
+      testDb().from('jobs').select('id').eq('kind', 'workflow.resume'),
+    );
+    expect(nowJobs.length).toBe(before);
   });
 
   it('durable approval resume (decided approval → catch-up → resume → complete)', async () => {
@@ -368,10 +410,16 @@ async function seedRun(
     await tick();
     await tick();
 
-    const resumeJobs = await testDb().from('jobs').select('id').eq('kind', 'workflow.resume');
-    expect(resumeJobs.data!.length).toBe(1);
-    const after = await testDb().from('workflow_runs').select('status').eq('id', run.id).single();
-    expect(after.data!.status).toBe('completed');
+    const resumeJobs = await rows(
+      'approval resume jobs',
+      testDb().from('jobs').select('id').eq('kind', 'workflow.resume'),
+    );
+    expect(resumeJobs.length).toBe(1);
+    const after = await one<{ status: string }>(
+      'run status',
+      testDb().from('workflow_runs').select('status').eq('id', run.id).single(),
+    );
+    expect(after.status).toBe('completed');
   });
 
   it('signal claiming is workspace-scoped (no cross-tenant run)', async () => {
@@ -388,18 +436,18 @@ async function seedRun(
     await tick();
     await tick();
 
-    const aRuns = await testDb()
-      .from('workflow_runs')
-      .select('workspace_id')
-      .eq('workflow_id', a.workflowId);
-    const bRuns = await testDb()
-      .from('workflow_runs')
-      .select('workspace_id')
-      .eq('workflow_id', b.workflowId);
-    expect(aRuns.data!.length).toBe(1);
-    expect(bRuns.data!.length).toBe(1);
-    expect(aRuns.data!.every((r) => r.workspace_id === WS_A)).toBe(true);
-    expect(bRuns.data!.every((r) => r.workspace_id === WS_B)).toBe(true);
+    const aRuns = await rows<{ workspace_id: string }>(
+      'a runs',
+      testDb().from('workflow_runs').select('workspace_id').eq('workflow_id', a.workflowId),
+    );
+    const bRuns = await rows<{ workspace_id: string }>(
+      'b runs',
+      testDb().from('workflow_runs').select('workspace_id').eq('workflow_id', b.workflowId),
+    );
+    expect(aRuns.length).toBe(1);
+    expect(bRuns.length).toBe(1);
+    expect(aRuns.every((r) => r.workspace_id === WS_A)).toBe(true);
+    expect(bRuns.every((r) => r.workspace_id === WS_B)).toBe(true);
   });
 
   it('idempotent across many stateless ticks (cold-start / redeploy safe, persistent state)', async () => {
@@ -416,7 +464,10 @@ async function seedRun(
     // Postgres across requests; dedup survives process churn).
     for (let i = 0; i < 5; i++) await tick();
     expect(await countRuns(workflowId)).toBe(1);
-    const jobs = await testDb().from('jobs').select('id').eq('kind', 'workflow.run');
-    expect(jobs.data!.length).toBe(1);
+    const jobs = await rows(
+      'run jobs',
+      testDb().from('jobs').select('id').eq('kind', 'workflow.run'),
+    );
+    expect(jobs.length).toBe(1);
   });
 });
