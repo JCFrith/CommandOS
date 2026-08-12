@@ -228,6 +228,21 @@ export interface WorkflowStepRun {
   completedAt: string | null;
 }
 
+/**
+ * A persisted delay-node timer that suspends a run until `dueAt`. The durable
+ * timer pass claims due, unclaimed timers and enqueues a `workflow.resume` job;
+ * `claimedAt` is the atomic claim/consumed marker. Identity is `(runId, nodeId)`
+ * so re-suspension on the same node upserts rather than duplicating.
+ */
+export interface WorkflowTimer {
+  id: string;
+  workspaceId: string;
+  runId: string;
+  nodeId: string;
+  dueAt: string;
+  claimedAt: string | null;
+}
+
 export type WorkflowApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 /** A human-in-the-loop gate that suspends a run until decided. */

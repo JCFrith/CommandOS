@@ -169,3 +169,31 @@ on first sign-in (server-only `app_provision_personal_workspace` RPC; idempotent
 concurrency-safe). If a durable deployment shows workspace/FK errors on create,
 confirm the migration applied `owner_id` + the RPC and that the service role can
 execute it. See [persistence.md](./persistence.md) / D-664.
+
+## Durable trigger/resume runtime (Sprint 7)
+
+**Health:** `GET /api/worker/health` (CRON_SECRET) reports `overdueTimers` +
+`oldestOverdueTimerMs`, `pendingApprovalResumes`, `resumeQueueDepth` +
+`oldestResumeJobMs`, and per-pass liveness (`workerPasses`). A rising overdue/queue
+count or a stale `lastOkAt` for a pass means the worker is not ticking — check the
+cron and that `POST /api/worker` authorizes.
+
+**Recovery is automatic:** the worker is stateless and idempotent. After a crash,
+cold start, or downtime, the next tick reclaims expired job leases, re-scans signals
+from the cursor, claims overdue timers, and catches up decided-but-unresumed
+approvals. Duplicate cron ticks and redeliveries are harmless (dedup on
+`trigger_claims` / `schedule_occurrences` / `workflow_timers.claimed_at`).
+
+**Manual replay:**
+
+- _Force a tick:_ authorized `POST /api/worker` (drives all passes + drain).
+- _Re-scan a workspace's signals from scratch:_ `select app_reset_trigger_cursor(:ws)`
+  — the next tick re-initializes future-only; `trigger_claims` prevents duplicate
+  runs for already-claimed occurrences.
+- _A stuck suspended run:_ confirm its `workflow_timers` row (`claimed_at` null,
+  `due_at` past) or decided `workflow_approvals` row exists, then force a tick; the
+  timer/approval-resume pass will enqueue `workflow.resume`.
+- _Never_ hand-edit `trigger_claims` / `schedule_occurrences` (append-only dedup
+  ledgers) to "retrigger" — reset the cursor or re-emit the source instead.
+
+Full design + invariants: [durable-triggers.md](./durable-triggers.md).

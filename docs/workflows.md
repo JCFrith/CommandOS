@@ -158,3 +158,15 @@ exactly as before; a foreign-workspace or client-supplied correlation is ignored
   payload sanitization** on every emitted signal.
 - Agent/operation steps run through the authoritative services, so RBAC + the
   agent trust boundary are enforced there; the runtime never bypasses them.
+
+## Durable triggers, schedules, timers & approvals (Sprint 7)
+
+In durable mode (`USE_SUPABASE_PERSISTENCE=1`), triggers/schedules/timers/approvals
+are evaluated by the stateless worker from the database — not the in-process
+`TriggerEngine`. Signal & schedule triggers enqueue `workflow.run`; due timers and
+decided approvals enqueue `workflow.resume`. An approval **decision does not execute
+the workflow inside the HTTP request** in durable mode — it enqueues a resume. A
+`delay` node persists a `workflow_timers` row on suspension. All are dedup-guarded,
+idempotent under at-least-once delivery, and workspace-scoped. In-memory dev mode is
+unchanged (synchronous inline resume). Full design:
+[durable-triggers.md](./durable-triggers.md).

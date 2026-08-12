@@ -22,6 +22,11 @@ on:
         default: local
         type: choice
         options: [local, hosted]
+      allow_validation_reset:
+        description: 'HOSTED ONLY: drop the isolated staging APPLICATION schema (via the immutable migrations rollback files) before applying, for a deterministic empty start. Never runs in local mode; never touches Supabase-managed schemas or a production project.'
+        required: false
+        default: false
+        type: boolean
 
 # Never run two validations against the same target concurrently.
 concurrency:
@@ -127,6 +132,51 @@ jobs:
             echo "SUPABASE_TEST_DB_URL=${H_DB}"
             echo "SUPABASE_TEST_JWT_SECRET=${H_JWT}"
           } >> "$GITHUB_ENV"
+
+      # HOSTED-ONLY, OPT-IN destructive reset of the ISOLATED staging APPLICATION
+      # schema. Earlier failed runs can leave partial/misordered CommandOS objects
+      # (e.g. a workflow_timers created with an inline node_id by a since-reverted
+      # migration) whose column order diverges from a clean chain, failing the
+      # deterministic schema comparison. This drops ONLY CommandOS application
+      # objects via the immutable migrations' rollback files so the chain rebuilds
+      # deterministically. It NEVER touches Supabase-managed schemas (auth, storage,
+      # realtime, extensions, internal objects), NEVER runs in local mode, and fails
+      # closed unless BOTH validation markers are present and the target is not a
+      # recognized production project. Not available to ordinary CI (ci.yml).
+      - name: Reset isolated staging application schema (hosted, opt-in)
+        if: ${{ github.event.inputs.mode == 'hosted' && github.event.inputs.allow_validation_reset == 'true' }}
+        env:
+          PROD_URL: ${{ secrets.PRODUCTION_URL }}
+          ALLOW_VALIDATION_RESET: 'true'
+        run: |
+          set -euo pipefail
+          # Fail closed: require BOTH validation markers, real staging credentials,
+          # and a target that is NOT the recognized production project.
+          if [ "${PRODUCTION_VALIDATION:-}" != "1" ]; then
+            echo "FAIL: PRODUCTION_VALIDATION!=1 — refusing destructive reset." >&2; exit 1
+          fi
+          if [ "${ALLOW_VALIDATION_RESET:-}" != "true" ]; then
+            echo "FAIL: ALLOW_VALIDATION_RESET marker absent — refusing destructive reset." >&2; exit 1
+          fi
+          if [ -z "${SUPABASE_TEST_DB_URL:-}" ] || [ -z "${SUPABASE_TEST_URL:-}" ]; then
+            echo "FAIL: staging validation credentials missing — refusing reset." >&2; exit 1
+          fi
+          if [ -n "${PROD_URL:-}" ] && [ "${SUPABASE_TEST_URL}" = "${PROD_URL}" ]; then
+            echo "FAIL: target is the recognized production project — refusing reset." >&2; exit 1
+          fi
+          echo "Hosted validation reset: isolated staging application schema only"
+          # Drop CommandOS application objects ONLY, newest immutable migration first.
+          # These rollback files reference only public-schema app tables/functions;
+          # Supabase-managed schemas, extensions, and auth/storage/realtime are untouched.
+          psql "$SUPABASE_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/rollback/20260807000000_durable_triggers_rollback.sql
+          psql "$SUPABASE_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/rollback/20260729000000_production_foundation_rollback.sql
+          # Verify every CommandOS application table from the immutable chain is gone
+          # (we inspect only public app tables; Supabase-managed schemas stay intact).
+          LEFT=$(psql "$SUPABASE_TEST_DB_URL" -t -A -c "select count(*) from information_schema.tables where table_schema='public' and table_name in ('workspaces','workspace_members','operations','operation_activity','agents','agent_activity','agent_executions','execution_logs','signals','signal_events','signal_subscriptions','workflows','workflow_versions','workflow_runs','workflow_step_runs','workflow_approvals','workflow_timers','trigger_claims','schedule_occurrences','jobs','trigger_scan_cursor');")
+          if [ "$LEFT" != "0" ]; then
+            echo "FAIL: reset left $LEFT CommandOS application table(s) behind — aborting." >&2; exit 1
+          fi
+          echo "Reset verified: 0 CommandOS application tables remain; Supabase-managed schemas preserved."
 
       - name: Apply canonical migration + validation helpers (hosted)
         if: ${{ github.event.inputs.mode == 'hosted' }}

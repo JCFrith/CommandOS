@@ -192,3 +192,54 @@ branch keeps `* * * * *` for production (Pro). The worker was validated **manual
 (authorized `POST /api/worker`) — no test weakened. Automatic every-minute cadence
 on staging requires Pro or an external scheduler; tracked as a plan limitation, not
 an app defect.
+
+## Durable trigger/schedule/timer/approval staging smoke (Sprint 7)
+
+Run against the deployed staging app (durable mode). Because Vercel Hobby cron is
+daily, the worker is driven **manually** via authorized `POST /api/worker`; this is
+a cadence limitation, not a correctness gap (the tick logic is identical).
+
+1. **Signal** — emit a matching signal for an active signal-triggered workflow;
+   invoke the worker; confirm **exactly one** run executes; invoke again → **no
+   duplicate**.
+2. **Schedule** — activate a scheduled workflow; wait past one interval; invoke the
+   worker; confirm exactly one run; invoke again → no duplicate (occurrence dedup).
+3. **Timer** — run a workflow with a `delay`; confirm it suspends (`waiting_timer`)
+   and a `workflow_timers` row exists; once due, invoke the worker; confirm the run
+   resumes **exactly once**.
+4. **Approval** — run a workflow with an approval; confirm it suspends; approve
+   through the deployed app; confirm the **HTTP request did not execute the
+   workflow** (still `waiting_approval`, a `workflow.resume` job is queued); invoke
+   the worker; confirm it resumes exactly once; approve again → no duplicate resume.
+5. Validate all three resume paths survive a **redeploy / cold start** (persisted
+   runs/timers/approvals resume after the worker runs post-redeploy).
+6. Confirm a **second workspace** cannot receive or resume the first workspace's
+   work, and that **no in-process `TriggerEngine` registration** is required
+   (`GET /api/worker/health` → `mode: 'durable'`).
+
+Verify health with `GET /api/worker/health` (CRON_SECRET) — overdue timers, resume
+queue depth, per-pass liveness. Full design: [durable-triggers.md](./durable-triggers.md).
+
+### Results (2026-08-11 — v0.7.0) — ✅ PASS
+
+The automated live smoke (`tests/staging/staging-smoke.test.ts`, gated on
+`PRODUCTION_VALIDATION=1` + `STAGING_URL` + `CRON_SECRET`) drives the **deployed**
+worker route end to end and passed **7/7**:
+
+1. worker authorization + health/metrics endpoints (401 without/with wrong bearer;
+   `triggerPath: 'durable'`; health aggregates present).
+2. durable signal trigger + duplicate suppression (incl. concurrent workers).
+3. durable scheduled trigger + occurrence dedup.
+4. durable timer resume (due timer → claim → resume → advance).
+5. durable approval resume (decided approval → catch-up → resume → complete).
+6. signal claiming is workspace-scoped (no cross-tenant run).
+7. idempotent across many stateless ticks (cold-start / redeploy safe).
+
+Preceded by the client-role preflight (service_role/anon/app-adapter resolve to the
+intended roles) and the hosted production validation run. One release-blocking issue
+was found and fixed: the scheduled-trigger check selected a nonexistent
+`schedule_occurrences.id` column, so a failed PostgREST query was masked by a
+non-null assertion (`data!.length`) throwing an opaque `TypeError`. It was
+**test-harness-only** — `service_role` SELECT on the table was already intentionally
+granted; the fix corrects the query and makes the smoke surface the real DB error
+instead of null-dereferencing.

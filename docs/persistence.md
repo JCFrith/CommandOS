@@ -90,3 +90,13 @@ with a foreign key to `workspaces(id)`, so a real authenticated user needs a
 - **Team-ready:** resolution is by membership; `kind='team'` workspaces (many
   members, `owner_id` null) are unaffected — no assumption that every workspace is
   personal. See [D-664](../DECISIONS.md).
+
+## Durable trigger/resume mode (Sprint 7)
+
+The same `USE_SUPABASE_PERSISTENCE` gate that selects Supabase repositories also
+selects the durable trigger/resume path: when enabled, `workflowTriggerPath ===
+'durable'`, the worker registers the `workflow.run`/`workflow.resume` handlers and
+its four pre-claim passes, and approval decisions enqueue resumes; when disabled,
+the in-process `TriggerEngine` fires triggers and approvals resume inline (no
+Supabase, no worker required). The gating keeps `server-only` adapters out of the
+dev bundle (lazy `require`). See [durable-triggers.md](./durable-triggers.md).

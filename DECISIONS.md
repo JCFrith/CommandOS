@@ -649,6 +649,83 @@ real staging project; live real-user smoke: sign-in provisioned a uuid workspace
 owner membership, Operations/Agents/Workflows created and persisted, survived a
 redeploy, and a second user was fully isolated. Not left as open debt.
 
+## Sprint 7 — Intelligence & Decision Engine (2026-08-05)
+
+Full plan: [docs/sprint-7-plan.md](./docs/sprint-7-plan.md). Approved sequence:
+durable trigger evaluation → Decision Engine → Insights & Recommendations → Human
+approval & execution. Phase 1 ships as `v0.7.0` before any Decision Engine work.
+
+### D-665 · Trigger-scan cursor is a progress marker, not the correctness mechanism
+
+A durable per-workspace `trigger_scan_cursor` records scan progress. `trigger_claims`
+(unique) remains the **authoritative** dedup guarantee. Cursor advancement is
+monotonic and safely replayable: a crash **before** advancement may reprocess
+signals but never creates a duplicate `WorkflowRun`; a crash **after** advancement
+never skips unclaimed work. Concurrency-safe (two workers may scan a workspace
+redundantly, never losing work) and operationally resettable without corrupting dedup.
+
+### D-666 · Durable worker execution (approved)
+
+Signal-triggered, scheduled, timer-resume, and approval-resume workflow work is
+**enqueued into the existing `LeasedJobStore`** (`workflow.run` / `workflow.resume`
+kinds). With persistence enabled, workflow execution no longer depends on an HTTP
+request's lifetime or a specific serverless instance. In-memory dev retains the
+synchronous `TriggerEngine`. Public `WorkflowService`/`WorkflowRuntime` contracts
+stay stable where possible.
+
+### D-667 · Trigger latency bounded by worker cadence (approved)
+
+~1-minute production target where the plan supports it; staging Hobby cadence
+documented. **No** self-invoking workers, distributed messaging, Realtime,
+`LISTEN/NOTIFY`, or another scheduler is introduced solely to reach sub-minute latency.
+
+### D-668 · Fold timer + approval resumption into worker-driven execution (approved)
+
+Durable timer resumption and approval-triggered resume use the same worker-driven
+architecture; approval decisions enqueue an **idempotent** resume job rather than
+continuing in-process. This materially reduces **TD-31**, but TD-31 is **not closed**
+unless mid-flight `AbortSignal` cancellation into Agent/AI calls is also implemented
+and verified.
+
+**Implementation note (2026-08-06).** D-666..D-668 are implemented on
+`sprint-7-durable-triggers` with green local gates: four ordered failure-isolated
+worker passes (signal triggers → schedules → timers → approval resumes),
+`workflow.run`/`workflow.resume` handlers, timer persistence on delay suspension,
+durable approval decisions (enqueue, not inline), five service-role RPCs, and
+`GET /api/worker/health`. Schedule catch-up processes only the most-recent missed
+occurrence (bounded), anchored deterministically at the version's `createdAt`.
+**Hosted-staging validation is complete (2026-08-11):** local + hosted production
+validation PASS, client-role diagnostics PASS, and the live Vercel staging smoke
+passed **7/7** against the deployed worker route — clearing the last gate for
+`v0.7.0`. Full design: [`docs/durable-triggers.md`](./docs/durable-triggers.md).
+
+## Release confirmations (2026-08-11 — v0.7.0)
+
+Confirmed by the product owner at the Sprint 7 Phase 1 release:
+
+- **D-665..D-668 approved and shipped** — durable, worker-driven evaluation of
+  Signal, schedule, timer, and approval triggers over persisted state (no
+  distributed bus / Realtime / `LISTEN/NOTIFY`; latency bounded by worker cadence).
+  In-memory dev retains the synchronous `TriggerEngine` (behaviour-equivalent).
+- **Validation PASS** — local production validation PASS; hosted production
+  validation PASS; client-role diagnostics PASS (service_role/anon/app service
+  adapter each resolve to the intended Postgres role); **live Vercel staging smoke
+  7/7** driving the deployed `POST /api/worker` route against the isolated staging
+  database. Durable signal/schedule/timer/approval paths, workspace isolation, and
+  stateless/idempotent worker behaviour (repeated + concurrent ticks) all verified.
+  The one release-blocking issue found — a smoke-harness query selecting a
+  nonexistent `schedule_occurrences.id` column that masked the real DB error behind
+  a null-deref — was **test-harness-only** (no app/schema/RLS/grant defect) and
+  fixed on the branch; `service_role` SELECT on that table was already intentionally
+  granted.
+- **TD-36 resolved** (→ TD-R13); **TD-31 narrowed** to mid-flight Agent/AI
+  `AbortSignal` cancellation only.
+- **Release.** `sprint-7-durable-triggers` reconciled with `main` (0 behind) and
+  merged **non-fast-forward** (history preserved, not squashed), tagged **v0.7.0**;
+  `v0.6.6` and all earlier tags unchanged.
+- **Phase 2 (Decision Engine) has NOT started** — deliberately deferred until after
+  this release.
+
 ## Release confirmations (2026-07-29 — v0.6.0)
 
 Confirmed by the product owner at the Sprint 6 release:

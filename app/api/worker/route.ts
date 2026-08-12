@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { backgroundWorker } from '@/services/jobs';
+import { backgroundWorker, workflowTriggerPath } from '@/services/jobs';
 
 /**
  * The stateless background-worker endpoint — the target of a Vercel Cron job
@@ -25,7 +25,10 @@ export async function POST(request: NextRequest) {
     }
   }
   const result = await backgroundWorker.tick();
-  return NextResponse.json({ ok: true, ...result });
+  // `triggerPath` is a runtime diagnostic: `durable` means signal triggers are
+  // evaluated by the worker from persisted Signals; `in-memory` means the
+  // in-process TriggerEngine drives them (dev / unconfigured).
+  return NextResponse.json({ ok: true, triggerPath: workflowTriggerPath, ...result });
 }
 
 // Vercel Cron issues GET by default; accept both.

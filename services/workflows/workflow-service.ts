@@ -59,6 +59,21 @@ export class WorkflowError extends Error {
 
 export type WorkflowServiceDeps = SignalDeps;
 
+/**
+ * Durable approval resumption seam (Sprint 7 D-668). When present (durable mode),
+ * an approval decision enqueues a `workflow.resume` job instead of executing the
+ * workflow inside the deciding HTTP request. Absent in dev/in-memory mode, where
+ * {@link WorkflowService.decideApproval} resumes synchronously (equivalent
+ * behaviour). The implementation is server-only (service-role RPC).
+ */
+export interface DurableApprovalResumer {
+  claimApprovalResume(
+    workspaceId: string,
+    approvalId: string,
+    runId: string,
+  ): Promise<'enqueued' | 'duplicate'>;
+}
+
 const defaultDeps: WorkflowServiceDeps = {
   now: () => new Date().toISOString(),
   id: () => crypto.randomUUID(),
@@ -85,6 +100,7 @@ export class WorkflowService {
     bus: SignalBus,
     private readonly publisher: SignalPublisher,
     private readonly deps: WorkflowServiceDeps = defaultDeps,
+    private readonly resumer?: DurableApprovalResumer,
   ) {
     this.triggers = new TriggerEngine(bus, (workflow, version, trigger) =>
       this.startFromTrigger(workflow, version, trigger),
@@ -327,6 +343,113 @@ export class WorkflowService {
     return this.runtime.resume(version, run, runCtx);
   }
 
+  /**
+   * Execute a durably-enqueued run — the target of the `workflow.run` job handler
+   * (Sprint 7 Phase 1, D-666). The run + its trigger claim were already created
+   * atomically by the durable trigger evaluator; this loads the authoritative,
+   * workspace-scoped run and its pinned version and drives it to a checkpoint.
+   *
+   * Idempotent and safe under at-least-once job delivery. Run-level concurrency is
+   * inherited from the queue: the trigger claim guarantees exactly one
+   * `workflow.run` job per run, and the job lease guarantees at most one worker
+   * runs that job at a time; the runtime itself skips already-completed steps by
+   * node id. So re-delivery converges — a terminal or suspended run is a no-op, a
+   * crashed (`running`) run resumes from its persisted frontier, and a fresh
+   * (`pending`) run starts. Never re-drives a suspension (that is the timer /
+   * approval path's job) and never runs cross-workspace (the run is loaded scoped).
+   */
+  async runEnqueued(workspaceId: string, runId: string, expectedVersionId?: string): Promise<void> {
+    const run = await this.repo.getRun(workspaceId, runId);
+    if (!run) return; // deleted — nothing to execute; no-op so the job stops retrying
+    if (isRunTerminal(run.status)) return; // already finished
+    if (run.status === 'waiting_approval' || run.status === 'waiting_timer') return; // its own path resumes it
+    if (expectedVersionId && expectedVersionId !== run.versionId) {
+      throw new WorkflowError('conflict', 'The enqueued run version does not match the run.');
+    }
+    const version = await this.repo.getVersion(workspaceId, run.versionId);
+    if (!version) {
+      // The pinned version is gone — finalize rather than retry a permanently
+      // broken run forever.
+      const failed: WorkflowRun = {
+        ...run,
+        status: 'failed',
+        frontier: [],
+        error: 'The workflow version is missing.',
+        completedAt: this.deps.now(),
+        updatedAt: this.deps.now(),
+      };
+      await this.repo.saveRun(failed);
+      await this.emitRun(failed, 'workflow.run.failed', 'run version missing', 'error');
+      return;
+    }
+    if (version.workflowId !== run.workflowId) {
+      throw new WorkflowError('conflict', 'The enqueued run does not match its version.');
+    }
+    const runCtx = this.runContext(workspaceId, systemActor(run.startedBy), run.correlationId);
+    if (run.status === 'pending') {
+      await this.runtime.start(version, run, runCtx);
+    } else {
+      await this.runtime.resume(version, run, runCtx); // `running` ⇒ crash recovery
+    }
+  }
+
+  /**
+   * Resume a durably-enqueued suspended run — the target of the `workflow.resume`
+   * job handler (Sprint 7 Phase 1, D-668). Enqueued by the durable timer pass
+   * (`cause: 'timer'`) or an approval decision / the approval-resume catch-up pass
+   * (`cause: 'approval'`). Loads the authoritative, workspace-scoped run + pinned
+   * version and re-advances it from its persisted frontier.
+   *
+   * Idempotent under at-least-once delivery: a terminal or already-advanced run is
+   * a no-op, and the cause must match the run's current suspension (a `timer`
+   * resume requires `waiting_timer`; an `approval` resume requires
+   * `waiting_approval`) — a mismatched/stale resume is dropped. Run-level
+   * concurrency is inherited from the one-resume-job-per-cause claim + the job
+   * lease; the runtime skips already-completed nodes by id.
+   */
+  async resumeEnqueued(
+    workspaceId: string,
+    runId: string,
+    cause: 'timer' | 'approval',
+    causeId: string,
+  ): Promise<void> {
+    const run = await this.repo.getRun(workspaceId, runId);
+    if (!run) return; // deleted — no-op
+    if (isRunTerminal(run.status)) return; // already finished — nothing to resume
+    // The resume cause must match the current suspension; otherwise this is a
+    // stale/duplicate resume (the run already advanced) — drop it idempotently.
+    if (cause === 'timer' && run.status !== 'waiting_timer') return;
+    if (cause === 'approval' && run.status !== 'waiting_approval') return;
+    if (cause === 'approval') {
+      // Verify the cited approval exists, belongs to this run, and is decided.
+      const approval = await this.repo.getApproval(workspaceId, causeId);
+      if (!approval || approval.runId !== runId || approval.status === 'pending') return;
+    }
+    const version = await this.repo.getVersion(workspaceId, run.versionId);
+    if (!version) {
+      const failed: WorkflowRun = {
+        ...run,
+        status: 'failed',
+        frontier: [],
+        error: 'The workflow version is missing.',
+        completedAt: this.deps.now(),
+        updatedAt: this.deps.now(),
+      };
+      await this.repo.saveRun(failed);
+      await this.emitRun(failed, 'workflow.run.failed', 'run version missing', 'error');
+      return;
+    }
+    await this.emitRun(run, 'workflow.resume.started', `resume (${cause})`, 'trace');
+    const runCtx = this.runContext(workspaceId, systemActor(run.startedBy), run.correlationId);
+    try {
+      const resumed = await this.runtime.resume(version, run, runCtx);
+      await this.emitRun(resumed, 'workflow.resume.completed', `resumed (${cause})`, 'trace');
+    } catch (err) {
+      await this.emitRun(run, 'workflow.resume.failed', `resume failed (${cause})`, 'error');
+      throw err; // let the worker retry via the job lease
+    }
+  }
+
   /** Decide a pending approval, then resume the run. */
   async decideApproval(
     ctx: WorkflowContext,
@@ -356,8 +479,17 @@ export class WorkflowService {
       await this.emitRun(run, 'workflow.approval.decided', `approval ${decision}`, 'notice');
       const version = await this.repo.getVersion(ctx.workspace.id, run.versionId);
       if (version && !isRunTerminal(run.status)) {
-        const runCtx = this.runContext(ctx.workspace.id, ctx.user, run.correlationId);
-        await this.runtime.resume(version, run, runCtx);
+        if (this.resumer) {
+          // Durable mode: DO NOT execute the workflow inside this HTTP request.
+          // The decision is persisted (above, transactional + decided-once); a
+          // `workflow.resume` job is enqueued (fast path, idempotent per approval).
+          // If this enqueue is lost to a crash, the approval-resume catch-up pass
+          // recovers it — the decision alone is enough to guarantee resumption.
+          await this.resumer.claimApprovalResume(ctx.workspace.id, approval.id, run.id);
+        } else {
+          const runCtx = this.runContext(ctx.workspace.id, ctx.user, run.correlationId);
+          await this.runtime.resume(version, run, runCtx);
+        }
       }
     }
     return decided;

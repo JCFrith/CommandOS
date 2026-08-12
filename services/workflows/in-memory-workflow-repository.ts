@@ -3,6 +3,7 @@ import type {
   WorkflowApproval,
   WorkflowRun,
   WorkflowStepRun,
+  WorkflowTimer,
   WorkflowVersion,
   TriggerClaim,
 } from '@/lib/workflows/types';
@@ -25,6 +26,8 @@ export class InMemoryWorkflowRepository implements WorkflowRepository {
   private readonly runs = new Map<string, WorkflowRun>();
   private readonly steps: WorkflowStepRun[] = [];
   private readonly approvals = new Map<string, WorkflowApproval>();
+  /** Timers keyed by `${runId}:${nodeId}` (dev-only; durable resume is Postgres). */
+  private readonly timers = new Map<string, WorkflowTimer>();
   /** Idempotency records keyed by `${workspaceId}:${triggerKey}` → runId. */
   private readonly triggerClaims = new Map<string, string>();
 
@@ -106,6 +109,11 @@ export class InMemoryWorkflowRepository implements WorkflowRepository {
     return this.steps
       .filter((s) => s.workspaceId === workspaceId && s.runId === runId)
       .map((s) => InMemoryWorkflowRepository.clone(s));
+  }
+
+  async createTimer(timer: WorkflowTimer): Promise<void> {
+    // Idempotent on (runId, nodeId): a re-suspension replaces the prior timer.
+    this.timers.set(`${timer.runId}:${timer.nodeId}`, InMemoryWorkflowRepository.clone(timer));
   }
 
   async createApproval(approval: WorkflowApproval): Promise<void> {

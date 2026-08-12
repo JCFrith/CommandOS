@@ -9,7 +9,40 @@ this file is the terse, versioned log.
 
 ## [Unreleased]
 
-_Nothing yet._
+_Nothing yet. Sprint 7 Phase 2 (Decision Engine) has not started._
+
+## [0.7.0] — 2026-08-11
+
+Sprint 7 — **Intelligence & Decision Engine** · Phase 1 (Durable Trigger Evaluation).
+Durable, worker-driven evaluation of Signal, schedule, timer, and approval triggers
+via the existing `LeasedJobStore` — **resolving TD-36** and narrowing TD-31 to
+mid-flight Agent/AI `AbortSignal` cancellation only. Decisions D-665..D-668. See
+`docs/durable-triggers.md`.
+
+**Validated** — local production validation PASS and hosted production validation
+PASS; client-role diagnostics PASS (service_role/anon/app-adapter resolve to the
+intended roles); **live Vercel staging smoke 7/7** driving the deployed
+`POST /api/worker` route against the isolated staging database — durable
+signal/schedule/timer/approval paths, workspace isolation, and stateless/idempotent
+worker behaviour (repeated + concurrent ticks) all verified. Local gates green
+(lint · typecheck · 300 unit tests · build).
+
+- **Added** — durable signal-trigger evaluator + production port + `workflow.run`
+  handler; durable schedule evaluator (deterministic most-recent-missed catch-up);
+  durable timer persistence (`workflow_timers` on delay suspension) + timer-resume
+  pass; durable approval resume (decision enqueues `workflow.resume` instead of
+  executing inline) + catch-up pass; `workflow.resume` handler.
+- **Added** — ordered, failure-isolated worker passes (reclaim → signal triggers →
+  schedules → timers → approval resumes → claim → execute → heartbeat); per-pass
+  liveness metrics; `GET /api/worker/health` (CRON_SECRET-guarded) durable health;
+  `workflowTriggerPath` / `triggerPath` diagnostics.
+- **Added** — migration RPCs `app_claim_schedule_run`, `app_claim_due_timers`,
+  `app_claim_approval_resume`, `app_claim_due_approval_resumes`, `app_durable_health`
+  (service-role-only, atomic claim+enqueue); `workflow_timers.node_id` +
+  `unique(run_id,node_id)`; rollback + validation-reset support.
+- **Tests** — 17 new unit tests (schedule occurrence math/identity, resume dispatch,
+  durable-vs-inline approval, timer persistence) + DB-gated integration
+  (`durable-resume.test.ts`, `durable-triggers.test.ts`).
 
 ## [0.6.6] — 2026-08-05
 
